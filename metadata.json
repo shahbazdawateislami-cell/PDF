@@ -1,0 +1,6 @@
+{
+  "name": "PDF Master India",
+  "description": "Digital PDF marketplace for India",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

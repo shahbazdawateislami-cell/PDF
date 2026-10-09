@@ -1,0 +1,99 @@
+export interface ProductVideo {
+  id: string;
+  title: string;
+  duration: string;
+  thumbnail: string;
+  videoUrl?: string;
+}
+
+export interface Review {
+  id: string;
+  userName: string;
+  rating: number;
+  date: string;
+  comment: string;
+  verified: boolean;
+}
+
+export interface Product {
+  id: string;
+  title: string;
+  category: string;
+  price: number;
+  oldPrice: number;
+  rating: number;
+  reviewsCount: number;
+  coverImage: string;
+  badge?: string; // e.g. "Bestseller", "New", "Trending"
+  description: string;
+  highlights: string[];
+  features: string[];
+  tableOfContents: { chapter: string; title: string; pages: string }[];
+  previewImages: string[];
+  samplePages: string[];
+  videos: ProductVideo[];
+  reviews: Review[];
+  faqs: { question: string; answer: string }[];
+  pdfPagesCount: number;
+  fileSize: string;
+  language: string;
+  pdfUrl?: string;
+  samplePdfText?: string;
+  isTrending?: boolean;
+  isBestseller?: boolean;
+  isNewArrival?: boolean;
+  series?: string;
+  createdAt?: string;
+}
+
+export interface Order {
+  id: string;
+  razorpayOrderId?: string;
+  razorpayPaymentId?: string;
+  productId: string;
+  productTitle: string;
+  productCover: string;
+  amount: number;
+  customerEmail: string;
+  customerName: string;
+  customerPhone?: string;
+  status: 'pending' | 'paid' | 'failed';
+  date: string;
+  downloadCount: number;
+}
+
+export interface DownloadLog {
+  id: string;
+  orderId: string;
+  productId: string;
+  productTitle: string;
+  customerEmail: string;
+  timestamp: string;
+  ipAddress?: string;
+}
+
+export interface Category {
+  id: string;
+  name: string;
+  icon: string;
+  count: number;
+}
+
+export interface Bundle {
+  id: string;
+  title: string;
+  subtitle: string;
+  productIds: string[];
+  price: number;
+  oldPrice: number;
+  badge: string;
+  coverImage?: string;
+  description: string;
+  isPopular?: boolean;
+}
+
+export interface Coupon {
+  code: string;
+  discountPercent: number;
+  description: string;
+}
