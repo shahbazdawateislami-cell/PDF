@@ -93,9 +93,12 @@ export interface Bundle {
 }
 
 export interface Coupon {
+  id: string;
   code: string;
   discountPercent: number;
   description: string;
+  isActive: boolean;
+  createdAt?: string;
 }
 
 export interface HeroStackedCard {

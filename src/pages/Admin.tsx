@@ -34,7 +34,8 @@ import {
   Zap,
   Copy,
   Share2,
-  CheckCheck
+  CheckCheck,
+  KeyRound
 } from 'lucide-react';
 import { useProducts } from '../context/ProductContext';
 import { useAuth } from '../context/AuthContext';
@@ -80,8 +81,8 @@ export default function Admin() {
   };
 
   const requestedTab = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState<'products' | 'bundles' | 'orders' | 'logs' | 'hero'>(
-    requestedTab === 'hero' ? 'hero' : 'products'
+  const [activeTab, setActiveTab] = useState<'products' | 'bundles' | 'orders' | 'logs' | 'hero' | 'api-keys'>(
+    requestedTab === 'hero' ? 'hero' : requestedTab === 'api-keys' ? 'api-keys' : 'products'
   );
 
   // Hero Banner Customization state
@@ -278,6 +279,60 @@ export default function Admin() {
     setCopiedKey(key);
     showNotify(`✓ ${label} copied to clipboard!`);
     setTimeout(() => setCopiedKey(null), 2500);
+  };
+
+  // Payment Gateway / API Keys settings state
+  const [apiKeyId, setApiKeyId] = useState('');
+  const [apiKeySecret, setApiKeySecret] = useState('');
+  const [apiWebhookSecret, setApiWebhookSecret] = useState('');
+  const [showKeySecret, setShowKeySecret] = useState(false);
+  const [isSavingKeys, setIsSavingKeys] = useState(false);
+  const [isKeysConfigured, setIsKeysConfigured] = useState(false);
+  const [keyEnvironment, setKeyEnvironment] = useState<'test' | 'live'>('test');
+
+  useEffect(() => {
+    fetch('/api/settings/keys')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.keyId) {
+          setApiKeyId(data.keyId);
+        }
+        setIsKeysConfigured(!!data.isConfigured);
+        setKeyEnvironment(data.environment || 'test');
+      })
+      .catch((err) => console.warn('Could not load api keys info:', err));
+  }, []);
+
+  const handleSaveApiKeys = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!apiKeyId.trim()) {
+      showNotify('⚠️ Razorpay Key ID enter karein (e.g. rzp_live_... ya rzp_test_...)');
+      return;
+    }
+    setIsSavingKeys(true);
+    try {
+      const res = await fetch('/api/settings/keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          keyId: apiKeyId.trim(),
+          keySecret: apiKeySecret.trim(),
+          webhookSecret: apiWebhookSecret.trim()
+        })
+      });
+      const data = await res.json();
+      if (res.ok) {
+        setIsKeysConfigured(true);
+        setKeyEnvironment(apiKeyId.trim().startsWith('rzp_live') ? 'live' : 'test');
+        showNotify('✓ Razorpay API Keys safalta-poorvak save aur active ho gayi!');
+      } else {
+        showNotify(`⚠️ Error: ${data.error || 'Failed to save keys'}`);
+      }
+    } catch (err) {
+      showNotify('⚠️ Server se connect karne mein error aaya');
+    } finally {
+      setIsSavingKeys(false);
+    }
   };
 
   // Handle Cover Image File Selection from Mobile Gallery / PC
@@ -1033,6 +1088,17 @@ export default function Admin() {
           >
             <Palette size={14} className={activeTab === 'hero' ? 'text-white' : 'text-blue-600'} />
             Hero Banner &amp; Overlapping PDFs
+          </button>
+          <button
+            onClick={() => setActiveTab('api-keys')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap flex items-center gap-1.5 shadow-xs ${
+              activeTab === 'api-keys'
+                ? 'bg-emerald-600 text-white ring-2 ring-emerald-400/50'
+                : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-300'
+            }`}
+          >
+            <KeyRound size={14} className={activeTab === 'api-keys' ? 'text-white' : 'text-emerald-700'} />
+            🔑 API Keys &amp; Payment Gateway {isKeysConfigured ? '✓' : '⚠️'}
           </button>
         </div>
 
@@ -1930,6 +1996,163 @@ export default function Admin() {
                   >
                     Open Live Homepage
                   </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+        {/* TAB 6: API KEYS & PAYMENT GATEWAY (RAZORPAY) CONFIGURATION */}
+        {activeTab === 'api-keys' && (
+          <div className="bg-white rounded-3xl border border-gray-200/90 shadow-sm overflow-hidden animate-fade-in">
+            {/* Header */}
+            <div className="p-6 border-b border-gray-100 flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-emerald-50/60 to-teal-50/30">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-600 to-teal-600 text-white flex items-center justify-center shadow-md">
+                  <KeyRound size={24} />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-lg font-black text-gray-900 leading-tight">
+                      Payment Gateway &amp; API Keys Settings
+                    </h3>
+                    <span className={`text-[10px] font-black px-2.5 py-0.5 rounded-full border ${
+                      isKeysConfigured
+                        ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                        : 'bg-amber-100 text-amber-800 border-amber-300'
+                    }`}>
+                      {isKeysConfigured ? `● Active (${keyEnvironment.toUpperCase()})` : '⚠️ Setup Required'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Apna Razorpay Payment Gateway connect karein taaki customers se UPI, Cards aur Netbanking ke direct payments aapke account mein aayein.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <a
+                  href="https://dashboard.razorpay.com/app/keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-4 py-2 rounded-xl text-xs font-bold bg-white text-gray-700 hover:text-emerald-700 border border-gray-300 shadow-2xs flex items-center gap-1.5 transition-colors"
+                >
+                  <ExternalLink size={13} />
+                  <span>Open Razorpay Dashboard</span>
+                </a>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-6">
+              {/* Form Card */}
+              <form onSubmit={handleSaveApiKeys} className="max-w-2xl space-y-4">
+                {/* Razorpay Key ID */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-gray-800">
+                    Razorpay Key ID <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      value={apiKeyId}
+                      onChange={(e) => setApiKeyId(e.target.value)}
+                      placeholder="e.g. rzp_live_xxxxxxxxxxxx ya rzp_test_xxxxxxxxxxxx"
+                      required
+                      className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-xs font-mono text-gray-900 outline-none transition-all"
+                    />
+                  </div>
+                  <p className="text-[11px] text-gray-500">
+                    Razorpay Dashboard &gt; Settings &gt; API Keys se 'Key Id' yahan paste karein.
+                  </p>
+                </div>
+
+                {/* Razorpay Key Secret */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-gray-800">
+                    Razorpay Key Secret <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showKeySecret ? 'text' : 'password'}
+                      value={apiKeySecret}
+                      onChange={(e) => setApiKeySecret(e.target.value)}
+                      placeholder="Apna Razorpay Key Secret yahan paste karein"
+                      className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-gray-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-xs font-mono text-gray-900 outline-none transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowKeySecret(!showKeySecret)}
+                      className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-700"
+                    >
+                      {showKeySecret ? <EyeOff size={16} /> : <Eye size={16} />}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-gray-500">
+                    Yeh secret server par surakshit (encrypted) save hota hai aur kisi public user ko nahi dikhta.
+                  </p>
+                </div>
+
+                {/* Razorpay Webhook Secret */}
+                <div className="space-y-1.5">
+                  <label className="block text-xs font-black text-gray-800">
+                    Razorpay Webhook Secret <span className="text-gray-400 font-normal">(Optional)</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={apiWebhookSecret}
+                    onChange={(e) => setApiWebhookSecret(e.target.value)}
+                    placeholder="e.g. your_webhook_secret_here"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-xs font-mono text-gray-900 outline-none transition-all"
+                  />
+                  <p className="text-[11px] text-gray-500">
+                    Automatic instant payment confirmation verify karne ke liye webhook secret.
+                  </p>
+                </div>
+
+                {/* Save Button */}
+                <div className="pt-2 flex items-center gap-3">
+                  <button
+                    type="submit"
+                    disabled={isSavingKeys}
+                    className="px-7 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs sm:text-sm tracking-wide shadow-md transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+                  >
+                    <Check size={16} className="stroke-[3]" />
+                    <span>{isSavingKeys ? 'Saving API Keys...' : '✓ Save API Keys & Activate Gateway'}</span>
+                  </button>
+
+                  {isKeysConfigured && (
+                    <span className="text-xs font-bold text-emerald-700 flex items-center gap-1">
+                      <ShieldCheck size={16} /> Gateway Ready
+                    </span>
+                  )}
+                </div>
+              </form>
+
+              {/* Step-by-Step Instructions Card */}
+              <div className="bg-amber-50/70 rounded-2xl p-5 border border-amber-200/80 space-y-3 text-xs text-amber-950">
+                <div className="font-extrabold flex items-center gap-2 text-amber-900 text-sm">
+                  <Sparkles size={16} className="text-amber-600 fill-amber-600" />
+                  <span>Razorpay API Keys Kahan Se Nikalein? (Simple Hindi Guide)</span>
+                </div>
+                <ol className="list-decimal list-inside space-y-2 text-amber-900/90 leading-relaxed pl-1">
+                  <li>
+                    <strong>Razorpay Dashboard Login:</strong> Apne browser mein <a href="https://dashboard.razorpay.com" target="_blank" rel="noopener noreferrer" className="underline font-bold text-amber-950">dashboard.razorpay.com</a> kholein.
+                  </li>
+                  <li>
+                    <strong>Settings Mein Jayein:</strong> Left menu mein sabse neeche <strong>Settings</strong> par click karein.
+                  </li>
+                  <li>
+                    <strong>API Keys Tab:</strong> Upar tabs mein <strong>"API Keys"</strong> par click karein.
+                  </li>
+                  <li>
+                    <strong>Generate Key:</strong> <strong>"Generate Key"</strong> ya <strong>"Regenerate Key"</strong> par click karein.
+                  </li>
+                  <li>
+                    <strong>Copy &amp; Paste:</strong> Screen par <strong>Key ID</strong> aur <strong>Key Secret</strong> dikhayi denge. Unhe copy karke upar wale boxes mein paste karein aur <strong>"Save API Keys"</strong> dabayein!
+                  </li>
+                </ol>
+                <div className="pt-2 text-[11px] text-amber-800 font-semibold bg-amber-100/60 p-2.5 rounded-xl border border-amber-200">
+                  💡 Note: Testing ke liye aap <span className="font-mono">rzp_test_...</span> keys use kar sakte hain, aur real customer payments lene ke liye <span className="font-mono">rzp_live_...</span> keys dalein.
                 </div>
               </div>
             </div>

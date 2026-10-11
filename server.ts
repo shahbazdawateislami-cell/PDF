@@ -30,12 +30,41 @@ app.use(express.json({
   }
 }));
 
-const razorpayKeyId = process.env.RAZORPAY_KEY_ID || '';
-const razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || '';
+let razorpayKeyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '';
+let razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || '';
+let razorpayWebhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || '';
 
-const razorpay = razorpayKeyId && razorpayKeySecret
+let razorpay: any = razorpayKeyId && razorpayKeySecret
   ? new Razorpay({ key_id: razorpayKeyId, key_secret: razorpayKeySecret })
   : null;
+
+const updateRazorpayClient = (keyId: string, keySecret: string, webhookSecret?: string) => {
+  razorpayKeyId = keyId;
+  razorpayKeySecret = keySecret;
+  if (webhookSecret !== undefined) razorpayWebhookSecret = webhookSecret;
+  if (razorpayKeyId && razorpayKeySecret) {
+    try {
+      razorpay = new Razorpay({ key_id: razorpayKeyId, key_secret: razorpayKeySecret });
+      console.log('Razorpay client successfully updated with active credentials');
+    } catch (err) {
+      console.error('Failed to initialize Razorpay with updated credentials:', err);
+    }
+  }
+};
+
+// Check Firestore on startup for saved keys
+if (db) {
+  db.collection('settings').doc('razorpay').get()
+    .then((doc: any) => {
+      if (doc.exists) {
+        const data = doc.data();
+        if (data?.keyId) {
+          updateRazorpayClient(data.keyId, data.keySecret || razorpayKeySecret, data.webhookSecret);
+        }
+      }
+    })
+    .catch((err: any) => console.warn('Could not read saved keys from Firestore:', err));
+}
 
 // Server-side price catalog to prevent price tampering
 const PRODUCT_PRICE_MAP: Record<string, number> = {
@@ -212,6 +241,63 @@ app.get('/api/download/:orderId', async (req, res) => {
     );
   } catch (err) {
     res.status(500).json({ error: 'Failed to generate secure download stream' });
+  }
+});
+
+// 4. API Keys & Payment Gateway Settings Endpoints
+app.get('/api/settings/keys', async (_req, res) => {
+  let firestoreKeyId = '';
+  let hasFirestoreSecret = false;
+  if (db) {
+    try {
+      const doc = await db.collection('settings').doc('razorpay').get();
+      if (doc.exists) {
+        const data = doc.data();
+        firestoreKeyId = data?.keyId || '';
+        hasFirestoreSecret = !!data?.keySecret;
+      }
+    } catch (e) {}
+  }
+
+  const effectiveKeyId = razorpayKeyId || firestoreKeyId;
+  const isConfigured = !!(effectiveKeyId && (razorpayKeySecret || hasFirestoreSecret));
+
+  res.json({
+    keyId: effectiveKeyId,
+    isConfigured,
+    hasSecret: !!razorpayKeySecret || hasFirestoreSecret,
+    environment: effectiveKeyId.startsWith('rzp_live') ? 'live' : 'test'
+  });
+});
+
+app.post('/api/settings/keys', async (req, res) => {
+  try {
+    const { keyId, keySecret, webhookSecret } = req.body;
+    if (!keyId || typeof keyId !== 'string') {
+      return res.status(400).json({ error: 'Razorpay Key ID is required' });
+    }
+
+    const secretToUse = keySecret || razorpayKeySecret;
+    updateRazorpayClient(keyId.trim(), secretToUse ? secretToUse.trim() : '', webhookSecret ? webhookSecret.trim() : undefined);
+
+    if (db) {
+      await db.collection('settings').doc('razorpay').set({
+        keyId: keyId.trim(),
+        keySecret: secretToUse ? secretToUse.trim() : '',
+        webhookSecret: webhookSecret ? webhookSecret.trim() : '',
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+    }
+
+    res.json({
+      success: true,
+      message: 'Razorpay API Keys saved successfully and active!',
+      keyId: keyId.trim(),
+      isConfigured: !!(keyId && secretToUse)
+    });
+  } catch (error: any) {
+    console.error('Failed to save API keys:', error);
+    res.status(500).json({ error: 'Failed to save API keys', details: error?.message });
   }
 });
 

@@ -125,8 +125,19 @@ export default function Checkout() {
 
         // Check if Razorpay script loaded
         if (typeof (window as any).Razorpay !== 'undefined') {
+          let activeRazorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder';
+          try {
+            const keysRes = await fetch('/api/settings/keys');
+            if (keysRes.ok) {
+              const keysData = await keysRes.json();
+              if (keysData?.keyId) {
+                activeRazorpayKey = keysData.keyId;
+              }
+            }
+          } catch (e) {}
+
           const options = {
-            key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder',
+            key: activeRazorpayKey,
             amount: finalPrice * 100,
             currency: 'INR',
             name: 'PDF Master India',

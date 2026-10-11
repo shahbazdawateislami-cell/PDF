@@ -156,13 +156,23 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearch }) => {
 
             {/* Admin or Login Button */}
             {isAdmin ? (
-              <Link
-                to="/admin"
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold hover:bg-emerald-100 transition-colors"
-              >
-                <ShieldCheck size={16} />
-                <span>Admin Panel</span>
-              </Link>
+              <div className="flex items-center gap-2">
+                <Link
+                  to="/admin?tab=api-keys"
+                  className="flex items-center gap-1 px-2.5 py-1.5 rounded-full bg-amber-50 text-amber-900 border border-amber-300 font-extrabold text-[11px] hover:bg-amber-100 transition-colors shadow-2xs"
+                  title="Configure Payment API Keys"
+                >
+                  <KeyRound size={13} className="text-amber-700" />
+                  <span className="hidden sm:inline">API Keys</span>
+                </Link>
+                <Link
+                  to="/admin"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 font-bold hover:bg-emerald-100 transition-colors"
+                >
+                  <ShieldCheck size={16} />
+                  <span>Admin Panel</span>
+                </Link>
+              </div>
             ) : (
               <button
                 onClick={() => setShowAdminPinModal(true)}
@@ -267,13 +277,22 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearch }) => {
 
             <div className="pt-2 border-t border-gray-100 flex items-center justify-between">
               {isAdmin ? (
-                <Link
-                  to="/admin"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-2 text-sm font-bold text-emerald-600"
-                >
-                  <ShieldCheck size={18} /> Admin Dashboard
-                </Link>
+                <div className="flex items-center gap-2">
+                  <Link
+                    to="/admin?tab=api-keys"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-1 text-xs font-bold text-amber-800 bg-amber-50 px-2.5 py-1 rounded-lg border border-amber-300"
+                  >
+                    <KeyRound size={14} /> API Keys
+                  </Link>
+                  <Link
+                    to="/admin"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="flex items-center gap-2 text-sm font-bold text-emerald-600"
+                  >
+                    <ShieldCheck size={18} /> Admin Dashboard
+                  </Link>
+                </div>
               ) : (
                 <button
                   onClick={() => {
