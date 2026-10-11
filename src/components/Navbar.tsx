@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { useProducts } from '../context/ProductContext';
 import { useAuth } from '../context/AuthContext';
+import { RealWhatsAppIcon } from './WhatsAppFloatingButton';
 
 interface NavbarProps {
   onSearch?: (query: string) => void;
@@ -150,7 +151,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearch }) => {
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-800 hover:bg-emerald-100 border border-emerald-200 transition-colors font-bold text-[11px]"
               title="Chat with official support on WhatsApp"
             >
-              <MessageCircle size={15} className="fill-emerald-600 text-emerald-600" />
+              <RealWhatsAppIcon size={16} className="text-[#25D366]" />
               <span>7079988808</span>
             </a>
 
@@ -267,7 +268,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearch }) => {
               className="flex items-center justify-between text-sm font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 p-2.5 rounded-xl hover:bg-emerald-100 transition-colors"
             >
               <span className="flex items-center gap-2">
-                <MessageCircle size={18} className="fill-emerald-600 text-emerald-600" />
+                <RealWhatsAppIcon size={20} className="text-[#25D366]" />
                 <span>WhatsApp Support</span>
               </span>
               <span className="text-xs bg-emerald-600 text-white font-mono px-2 py-0.5 rounded-full font-bold">

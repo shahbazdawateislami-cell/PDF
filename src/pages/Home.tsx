@@ -149,8 +149,8 @@ export default function Home() {
 
 
 
-          {/* Special Offer Pill Badge (Top Right) */}
-          <div className="absolute top-4 right-4 md:top-6 md:right-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl p-2.5 md:p-3.5 text-center shadow-lg border border-white/20 transform rotate-1 z-10">
+          {/* Special Offer Pill Badge (Top Right on Tablet/Desktop, Hidden on narrow mobile to avoid overlap) */}
+          <div className="hidden sm:block absolute top-4 right-4 md:top-6 md:right-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl p-2.5 md:p-3.5 text-center shadow-lg border border-white/20 transform rotate-1 z-10">
             <div className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-orange-100">
               Special Offer
             </div>
@@ -162,10 +162,17 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8 pt-4 md:pt-0">
+          <div className="relative z-10 flex flex-col lg:flex-row items-center lg:items-start justify-between gap-6 sm:gap-8 pt-1 sm:pt-4 md:pt-0">
             {/* Left Content */}
-            <div className="max-w-xl text-left space-y-4">
-              <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-[1.15]">
+            <div className="max-w-xl text-left space-y-3 sm:space-y-4 w-full">
+              {/* Mobile-only compact offer pill: neatly placed above headline with zero overlap */}
+              <div className="sm:hidden inline-flex items-center gap-2 bg-gradient-to-r from-orange-500 to-red-600 text-white px-3 py-1 rounded-full text-[11px] font-black shadow-md border border-white/20">
+                <span className="uppercase text-[9px] tracking-wider text-orange-200">Special Offer</span>
+                <span>•</span>
+                <span>Up to 50% OFF on PDFs</span>
+              </div>
+
+              <h1 className="text-2xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-snug sm:leading-[1.15] break-words">
                 Learn More. Do More.<br />
                 <span className="text-[#FBBF24]">Grow Faster.</span>
               </h1>
@@ -174,16 +181,16 @@ export default function Home() {
                 Practical PDF Guides for Students, Teachers, Professionals &amp; Business Owners. Instant downloads with lifetime access.
               </p>
 
-              <div className="pt-2 flex flex-wrap items-center gap-3">
+              <div className="pt-1 sm:pt-2 flex flex-wrap items-center gap-2.5 sm:gap-3">
                 <Link
                   to="/all"
-                  className="inline-flex items-center gap-2 bg-[#F59E0B] hover:bg-[#D97706] text-navy-950 font-extrabold text-xs sm:text-sm px-6 py-3 rounded-full shadow-lg hover:shadow-orange-500/20 active:scale-95 transition-all"
+                  className="inline-flex items-center gap-2 bg-[#F59E0B] hover:bg-[#D97706] text-navy-950 font-extrabold text-xs sm:text-sm px-5 sm:px-6 py-2.5 sm:py-3 rounded-full shadow-lg hover:shadow-orange-500/20 active:scale-95 transition-all"
                 >
-                  Explore PDFs <ArrowRight size={16} />
+                  Explore PDFs <ArrowRight size={15} />
                 </Link>
                 <Link
                   to="/all?cat=AI+Tools"
-                  className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition-all"
+                  className="inline-flex items-center gap-1.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-white font-bold text-xs border border-white/20 transition-all"
                 >
                   🔥 AI Guides (₹99)
                 </Link>
