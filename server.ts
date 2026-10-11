@@ -227,7 +227,8 @@ const distPath = path.resolve(__dirname, 'dist');
 
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
-  app.get('*', (req, res, next) => {
+  // SPA Catch-all fallback using middleware without path string (Express 5 compatible)
+  app.use((req, res, next) => {
     if (req.path.startsWith('/api')) {
       return next();
     }

@@ -40,6 +40,7 @@ export default function Home() {
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
   const [previewModalProduct, setPreviewModalProduct] = useState<Product | null>(null);
+  const [catalogCategory, setCatalogCategory] = useState<string>('all');
 
   // Marketing: Live Social Proof Toast
   const [showProof, setShowProof] = useState(false);
@@ -92,6 +93,12 @@ export default function Home() {
   const bestsellingProducts = products.filter((p) => p.isBestseller || p.id.includes('marketing') || p.id.includes('islamic') || p.id.includes('canva') || p.id.includes('prompt') || p.id.includes('excel') || p.id.includes('video')).slice(0, 6);
   const newArrivals = products.filter((p) => p.isNewArrival || p.id.includes('youtube') || p.id.includes('ctet') || p.id.includes('science') || p.id.includes('hindi') || p.id.includes('kids') || p.id.includes('academic')).slice(0, 6);
 
+  // Catalog for full 2-by-2 products showcase
+  const displayedCatalogProducts = catalogCategory === 'all'
+    ? products
+    : products.filter((p) => p.category === catalogCategory);
+  const availableCategories = Array.from(new Set(products.map((p) => p.category).filter(Boolean)));
+
   const handleNewsletterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (newsletterEmail) {
@@ -140,17 +147,7 @@ export default function Home() {
           {/* Subtle star particles background */}
           <div className="absolute inset-0 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:24px_24px] opacity-15 pointer-events-none" />
 
-          {/* Admin shortcut button when admin is logged in */}
-          {isAdmin && (
-            <Link
-              to="/admin?tab=hero"
-              className="absolute top-4 left-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/50 hover:bg-black/75 backdrop-blur-md border border-white/25 text-white text-[11px] font-bold shadow-md hover:scale-105 transition-all"
-              title="Admin Panel: Change Background Photo & Overlapping PDFs"
-            >
-              <Palette size={13} className="text-yellow-400" />
-              <span>Edit Hero &amp; PDFs</span>
-            </Link>
-          )}
+
 
           {/* Special Offer Pill Badge (Top Right) */}
           <div className="absolute top-4 right-4 md:top-6 md:right-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl p-2.5 md:p-3.5 text-center shadow-lg border border-white/20 transform rotate-1 z-10">
@@ -577,36 +574,84 @@ export default function Home() {
           />
         </section>
 
-        {/* BESTSELLING PDFS SECTION WITH CAROUSEL */}
-        <section className="bg-white rounded-2xl p-4 sm:p-6 border border-gray-200/80 shadow-xs">
-          <div className="flex justify-between items-center mb-4">
+        {/* ALL PDF PRODUCTS FULL SHOWCASE (2-by-2 GRID FORMAT ON MOBILE, RESPONSIVE ON DESKTOP) */}
+        <section className="bg-white rounded-3xl p-4 sm:p-7 border border-gray-200/90 shadow-sm space-y-5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
             <div>
-              <h2 className="text-xl md:text-2xl font-black text-gray-900 tracking-tight">
-                Bestselling PDFs
+              <div className="inline-flex items-center gap-1.5 text-[11px] bg-blue-100 text-blue-900 font-black px-2.5 py-0.5 rounded-full mb-1">
+                <span>📚 Complete Library</span>
+                <span>•</span>
+                <span>{products.length} Digital PDFs Available</span>
+              </div>
+              <h2 className="text-xl sm:text-3xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                <span>All PDF Books &amp; Study Guides</span>
               </h2>
+              <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
+                Website ki sabhi digital guides ek jagah — mobile par 2-by-2 format mein har kitab ko samne dekhein aur instant download karein.
+              </p>
             </div>
+
             <Link
-              to="/all?filter=bestselling"
-              className="text-xs md:text-sm font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 group"
+              to="/all"
+              className="self-start sm:self-auto text-xs font-bold text-blue-600 hover:text-blue-800 bg-blue-50 hover:bg-blue-100 px-3.5 py-2 rounded-xl flex items-center gap-1 transition-colors border border-blue-200"
             >
-              View All <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
+              <span>Explore All ({products.length})</span>
+              <ArrowRight size={14} />
             </Link>
           </div>
 
-          <Carousel
-            items={bestsellingProducts.map((product) => (
+          {/* Quick Category Filter Chips */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            <button
+              onClick={() => setCatalogCategory('all')}
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                catalogCategory === 'all'
+                  ? 'bg-gray-900 text-white shadow-xs'
+                  : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+              }`}
+            >
+              All PDFs ({products.length})
+            </button>
+            {availableCategories.map((cat) => {
+              const count = products.filter((p) => p.category === cat).length;
+              return (
+                <button
+                  key={cat}
+                  onClick={() => setCatalogCategory(cat)}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    catalogCategory === cat
+                      ? 'bg-orange-600 text-white shadow-xs'
+                      : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  {cat} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Products Grid: 2-by-2 on mobile screens, clean responsive layout on larger displays */}
+          <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-4 md:gap-5">
+            {displayedCatalogProducts.map((product) => (
               <ProductCard
                 key={product.id}
                 product={product}
                 onQuickPreview={(p) => setPreviewModalProduct(p)}
               />
             ))}
-            itemsToShow={{ mobile: 1.5, tablet: 3, desktop: 6 }}
-            autoScroll={true}
-            autoScrollInterval={4500}
-            showArrows={true}
-            showDots={true}
-          />
+          </div>
+
+          {displayedCatalogProducts.length === 0 && (
+            <div className="text-center py-10 bg-gray-50 rounded-2xl border border-dashed border-gray-200">
+              <p className="text-sm font-bold text-gray-500">Is category mein filhaal koi PDF nahi hai.</p>
+              <button
+                onClick={() => setCatalogCategory('all')}
+                className="mt-2 text-xs font-bold text-blue-600 hover:underline"
+              >
+                View All PDFs
+              </button>
+            </div>
+          )}
         </section>
 
         {/* TWO MIDDLE PROMOTIONAL BANNERS */}
