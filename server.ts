@@ -196,7 +196,145 @@ app.post('/api/webhook', async (req: any, res) => {
   res.status(200).json({ received: true });
 });
 
-// 3. Secure PDF Download Endpoint (Ownership & Payment Verification)
+// 3. Cryptographic Razorpay Signature Verification & Order Confirmation
+app.post('/api/verify-payment', async (req, res) => {
+  try {
+    const {
+      razorpay_order_id,
+      razorpay_payment_id,
+      razorpay_signature,
+      orderId,
+      productId,
+      amount,
+      customerEmail,
+      customerName,
+      customerPhone
+    } = req.body;
+
+    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+      return res.status(400).json({
+        success: false,
+        verified: false,
+        error: 'Missing required Razorpay verification parameters (order_id, payment_id, signature)'
+      });
+    }
+
+    // Determine secret key to verify against
+    let secret = razorpayKeySecret;
+    if (!secret && db) {
+      try {
+        const settingsDoc = await db.collection('settings').doc('razorpay').get();
+        if (settingsDoc.exists) {
+          secret = settingsDoc.data()?.keySecret || '';
+        }
+      } catch (err) {}
+    }
+
+    if (!secret) {
+      return res.status(500).json({
+        success: false,
+        verified: false,
+        error: 'Razorpay Key Secret is not configured. Please save API keys in Admin Panel first.'
+      });
+    }
+
+    // Generate expected HMAC-SHA256 signature
+    const bodyToSign = `${razorpay_order_id}|${razorpay_payment_id}`;
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(bodyToSign)
+      .digest('hex');
+
+    const expectedBuffer = Buffer.from(expectedSignature, 'utf-8');
+    const receivedBuffer = Buffer.from(razorpay_signature, 'utf-8');
+
+    let isMatch = false;
+    if (expectedBuffer.length === receivedBuffer.length) {
+      isMatch = crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
+    }
+
+    if (!isMatch) {
+      console.warn(`[Payment Verification Failed] Signature mismatch for Order: ${razorpay_order_id}, Payment: ${razorpay_payment_id}`);
+      return res.status(400).json({
+        success: false,
+        verified: false,
+        error: 'Payment verification failed: Invalid cryptographic signature! Access denied.'
+      });
+    }
+
+    console.log(`[Payment Verified Successfully] Payment: ${razorpay_payment_id}, Order: ${razorpay_order_id}`);
+
+    // Update verified order in Firestore
+    const finalOrderId = orderId || razorpay_order_id;
+    if (db) {
+      try {
+        await db.collection('orders').doc(finalOrderId).set({
+          id: finalOrderId,
+          razorpayOrderId: razorpay_order_id,
+          razorpayPaymentId: razorpay_payment_id,
+          status: 'paid',
+          verified: true,
+          productId: productId || '',
+          amount: amount || 0,
+          customerEmail: customerEmail || '',
+          customerName: customerName || '',
+          customerPhone: customerPhone || '',
+          paidAt: new Date().toISOString()
+        }, { merge: true });
+
+        await db.collection('payments').doc(razorpay_payment_id).set({
+          id: razorpay_payment_id,
+          orderId: finalOrderId,
+          status: 'captured',
+          signature: razorpay_signature,
+          createdAt: new Date().toISOString()
+        }, { merge: true });
+      } catch (dbErr) {
+        console.error('Error updating order in Firestore:', dbErr);
+      }
+    }
+
+    return res.json({
+      success: true,
+      verified: true,
+      message: 'Razorpay payment successfully verified!',
+      orderId: finalOrderId,
+      paymentId: razorpay_payment_id
+    });
+  } catch (error: any) {
+    console.error('Error verifying payment:', error);
+    return res.status(500).json({
+      success: false,
+      verified: false,
+      error: 'Server error while verifying payment',
+      details: error?.message
+    });
+  }
+});
+
+// 4. Check Order Verification Status
+app.get('/api/orders/:orderId/verify-status', async (req, res) => {
+  try {
+    const { orderId } = req.params;
+    if (!orderId) return res.status(400).json({ verified: false });
+
+    if (db) {
+      const doc = await db.collection('orders').doc(orderId).get();
+      if (doc.exists) {
+        const data = doc.data();
+        if (data?.status === 'paid' && data?.verified !== false) {
+          return res.json({ verified: true, status: 'paid', order: data });
+        }
+      }
+    }
+
+    return res.json({ verified: false, status: 'unverified' });
+  } catch (err: any) {
+    return res.status(500).json({ verified: false, error: err?.message });
+  }
+});
+
+// 5. Secure PDF Download Endpoint (Ownership & Payment Verification)
 app.get('/api/download/:orderId', async (req, res) => {
   const { orderId } = req.params;
 

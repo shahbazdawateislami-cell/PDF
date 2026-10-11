@@ -58,6 +58,7 @@ export interface Order {
   customerName: string;
   customerPhone?: string;
   status: 'pending' | 'paid' | 'failed';
+  verified?: boolean;
   date: string;
   downloadCount: number;
 }
@@ -93,11 +94,11 @@ export interface Bundle {
 }
 
 export interface Coupon {
-  id: string;
+  id?: string;
   code: string;
   discountPercent: number;
   description: string;
-  isActive: boolean;
+  isActive?: boolean;
   createdAt?: string;
 }
 

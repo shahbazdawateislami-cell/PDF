@@ -108,72 +108,129 @@ export default function Checkout() {
     const generatedOrderId = `order_${Date.now()}`;
 
     try {
-      // 1. Attempt server-side Razorpay order creation
+      // 1. Create server-side Razorpay order
       const res = await fetch('/api/create-order', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           productId: checkoutItem?.id,
           price: finalPrice,
-          customerId: customerEmail
+          customerId: customerEmail || 'guest'
         })
       });
 
-      if (res.ok) {
-        const orderData = await res.json();
-        const rzpOrderId = orderData.id || generatedOrderId;
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to initialize order on server');
+      }
 
-        // Check if Razorpay script loaded
-        if (typeof (window as any).Razorpay !== 'undefined') {
-          let activeRazorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder';
-          try {
-            const keysRes = await fetch('/api/settings/keys');
-            if (keysRes.ok) {
-              const keysData = await keysRes.json();
-              if (keysData?.keyId) {
-                activeRazorpayKey = keysData.keyId;
-              }
-            }
-          } catch (e) {}
+      const orderData = await res.json();
+      const rzpOrderId = orderData.id;
 
-          const options = {
-            key: activeRazorpayKey,
-            amount: finalPrice * 100,
-            currency: 'INR',
-            name: 'PDF Master India',
-            description: itemTitle,
-            order_id: rzpOrderId,
-            prefill: {
-              name: customerName,
-              email: customerEmail,
-              contact: customerPhone
-            },
-            theme: { color: '#DC2626' },
-            handler: async function (response: any) {
-              await handleCompleteOrder(response.razorpay_payment_id || `pay_${Date.now()}`, rzpOrderId);
-            },
-            modal: {
-              ondismiss: function () {
+      if (!rzpOrderId) {
+        throw new Error('No order ID received from Razorpay');
+      }
+
+      // 2. Fetch active Razorpay Key
+      let activeRazorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID || '';
+      try {
+        const keysRes = await fetch('/api/settings/keys');
+        if (keysRes.ok) {
+          const keysData = await keysRes.json();
+          if (keysData?.keyId) {
+            activeRazorpayKey = keysData.keyId;
+          }
+        }
+      } catch (e) {}
+
+      if (!activeRazorpayKey) {
+        setErrorMessage('⚠️ Razorpay Key ID configure nahi hai! Kripya Admin Panel me API Key daalein.');
+        setIsProcessing(false);
+        return;
+      }
+
+      // 3. Launch Razorpay Checkout Modal
+      if (typeof (window as any).Razorpay !== 'undefined') {
+        const options = {
+          key: activeRazorpayKey,
+          amount: finalPrice * 100,
+          currency: 'INR',
+          name: 'PDF Master India',
+          description: itemTitle,
+          order_id: rzpOrderId,
+          prefill: {
+            name: customerName,
+            email: customerEmail,
+            contact: customerPhone
+          },
+          theme: { color: '#DC2626' },
+          handler: async function (response: any) {
+            setIsProcessing(true);
+            setErrorMessage(null);
+
+            // 4. STRICT Cryptographic Signature Verification on Backend
+            try {
+              const verifyRes = await fetch('/api/verify-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  razorpay_order_id: response.razorpay_order_id,
+                  razorpay_payment_id: response.razorpay_payment_id,
+                  razorpay_signature: response.razorpay_signature,
+                  orderId: rzpOrderId,
+                  productId: checkoutItem?.id,
+                  amount: finalPrice,
+                  customerEmail: customerEmail || 'customer@pdfmaster.in',
+                  customerName: customerName || 'Valued Reader',
+                  customerPhone: customerPhone || ''
+                })
+              });
+
+              const verifyData = await verifyRes.json();
+
+              if (verifyRes.ok && verifyData.verified) {
+                // Payment verified cryptographically! Safe to unlock download.
+                await handleCompleteOrder(response.razorpay_payment_id, rzpOrderId);
+              } else {
+                setErrorMessage(
+                  verifyData.error ||
+                  '❌ Payment verification fail ho gaya! Jab tak payment verify nahi hota, download button lock rahega.'
+                );
                 setIsProcessing(false);
               }
+            } catch (err: any) {
+              console.error('Payment verification failed:', err);
+              setErrorMessage('❌ Payment verify karne me error aaya. Download lock hai.');
+              setIsProcessing(false);
             }
-          };
+          },
+          modal: {
+            ondismiss: function () {
+              setIsProcessing(false);
+              setErrorMessage('Payment poora nahi hua ya cancel kar diya gaya. Download unlock karne ke liye verified payment zaroori hai.');
+            }
+          }
+        };
 
-          const rzp = new (window as any).Razorpay(options);
-          rzp.on('payment.failed', function () {
-            setErrorMessage('Payment failed or cancelled. Please retry.');
-            setIsProcessing(false);
-          });
-          rzp.open();
-          return;
-        }
+        const rzp = new (window as any).Razorpay(options);
+        rzp.on('payment.failed', function (resp: any) {
+          const reason = resp?.error?.description || 'Payment failed or declined by bank';
+          setErrorMessage(`❌ Payment fail ho gaya: ${reason}. Download lock hai.`);
+          setIsProcessing(false);
+        });
+
+        rzp.open();
+        return;
+      } else {
+        throw new Error('Razorpay payment library load nahi ho saki. Kripya page refresh karein.');
       }
-    } catch (err) {
-      console.warn('Backend order call failed, offering test sandbox bypass:', err);
+    } catch (err: any) {
+      console.error('Razorpay payment flow error:', err);
+      setErrorMessage(
+        err.message || 'Payment start nahi ho saka. Kripya Admin Panel me apni Razorpay API Keys check karein.'
+      );
+      setIsProcessing(false);
     }
-
-    // Direct verified sandbox completion so user never gets stuck
-    await handleCompleteOrder(`pay_verified_${Date.now()}`, generatedOrderId);
   };
 
   return (
