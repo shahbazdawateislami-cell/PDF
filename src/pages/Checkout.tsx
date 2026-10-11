@@ -41,6 +41,18 @@ export default function Checkout() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  type PaymentMethodType = 'all' | 'phonepe' | 'gpay' | 'paytm' | 'bhim' | 'card' | 'netbanking';
+  const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethodType>('all');
+
+  const PAYMENT_METHODS: { id: PaymentMethodType; name: string; tag: string; icon: string; subtitle: string }[] = [
+    { id: 'phonepe', name: 'PhonePe', tag: 'Fastest UPI', icon: '🟣', subtitle: 'PhonePe App / QR' },
+    { id: 'gpay', name: 'Google Pay', tag: '1-Tap UPI', icon: '🔵', subtitle: 'GPay App / UPI ID' },
+    { id: 'paytm', name: 'Paytm', tag: 'UPI & Wallet', icon: '🔷', subtitle: 'Paytm UPI / Wallet' },
+    { id: 'bhim', name: 'BHIM UPI', tag: 'Any Bank', icon: '🟢', subtitle: 'Any UPI App / ID' },
+    { id: 'card', name: 'Debit / Card', tag: 'Instant', icon: '💳', subtitle: 'Visa, Master, RuPay' },
+    { id: 'netbanking', name: 'Net Banking', tag: 'All Banks', icon: '🏦', subtitle: 'SBI, HDFC, ICICI, etc.' },
+  ];
+
   // Coupon code state
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountPercent: number } | null>(null);
@@ -119,12 +131,12 @@ export default function Checkout() {
         })
       });
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to initialize order on server');
+      const orderData = await res.json().catch(() => null);
+
+      if (!res.ok || !orderData) {
+        throw new Error(orderData?.details || orderData?.error || 'Failed to initialize order on server');
       }
 
-      const orderData = await res.json();
       const rzpOrderId = orderData.id;
 
       if (!rzpOrderId) {
@@ -150,8 +162,17 @@ export default function Checkout() {
       }
 
       // 3. Launch Razorpay Checkout Modal
+        let preferredMethod: string | undefined = undefined;
+        if (['phonepe', 'gpay', 'paytm', 'bhim'].includes(selectedPaymentMethod)) {
+          preferredMethod = 'upi';
+        } else if (selectedPaymentMethod === 'card') {
+          preferredMethod = 'card';
+        } else if (selectedPaymentMethod === 'netbanking') {
+          preferredMethod = 'netbanking';
+        }
+
       if (typeof (window as any).Razorpay !== 'undefined') {
-        const options = {
+        const options: any = {
           key: activeRazorpayKey,
           amount: finalPrice * 100,
           currency: 'INR',
@@ -161,8 +182,16 @@ export default function Checkout() {
           prefill: {
             name: customerName,
             email: customerEmail,
-            contact: customerPhone
+            contact: customerPhone,
+            ...(preferredMethod ? { method: preferredMethod } : {})
           },
+          ...(preferredMethod ? {
+            config: {
+              display: {
+                sequence: preferredMethod === 'upi' ? ['upi', 'card', 'netbanking'] : [preferredMethod, 'upi', 'card']
+              }
+            }
+          } : {}),
           theme: { color: '#DC2626' },
           handler: async function (response: any) {
             setIsProcessing(true);
@@ -295,24 +324,83 @@ export default function Checkout() {
                 </div>
               </div>
 
-              {/* Supported Indian payment methods chips */}
-              <div className="p-3.5 bg-gradient-to-r from-orange-50/80 to-amber-50/60 rounded-2xl border border-orange-200/80 space-y-2">
-                <div className="font-extrabold text-gray-800 flex items-center justify-between text-xs">
-                  <span className="flex items-center gap-1.5">
-                    <CreditCard size={14} className="text-orange-600" /> All Payment Methods Supported:
+              {/* Supported Indian payment methods chips (Fully Functional Selector) */}
+              <div className="p-4 bg-gradient-to-br from-amber-50/90 via-orange-50/70 to-red-50/30 rounded-2xl border border-orange-200/90 space-y-3">
+                <div className="font-extrabold text-gray-900 flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1.5 text-gray-900">
+                    <CreditCard size={15} className="text-orange-600" />
+                    <span>Choose Payment Method / UPI App:</span>
                   </span>
-                  <span className="text-emerald-700 font-black text-[11px] bg-emerald-100/80 px-2 py-0.5 rounded-md">
-                    Instant UPI Enabled
+                  <span className="text-emerald-700 font-black text-[10px] bg-emerald-100/90 px-2 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
+                    Instant 1-Tap UPI
                   </span>
                 </div>
-                <div className="flex flex-wrap gap-1.5 text-gray-700">
-                  <span className="bg-white border border-orange-200 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-2xs">Google Pay</span>
-                  <span className="bg-white border border-orange-200 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-2xs">PhonePe</span>
-                  <span className="bg-white border border-orange-200 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-2xs">Paytm</span>
-                  <span className="bg-white border border-orange-200 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-2xs">BHIM UPI</span>
-                  <span className="bg-white border border-orange-200 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-2xs">Debit / Credit Card</span>
-                  <span className="bg-white border border-orange-200 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-2xs">Net Banking</span>
+
+                {/* Fully Functional Interactive Payment Method Buttons */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {PAYMENT_METHODS.map((method) => {
+                    const isSelected = selectedPaymentMethod === method.id;
+                    return (
+                      <button
+                        key={method.id}
+                        type="button"
+                        onClick={() => setSelectedPaymentMethod(isSelected ? 'all' : method.id)}
+                        className={`flex items-center justify-between p-2.5 rounded-xl border text-left transition-all duration-200 cursor-pointer ${
+                          isSelected
+                            ? 'bg-gradient-to-r from-emerald-600 to-teal-700 text-white border-emerald-600 shadow-md ring-2 ring-emerald-300 scale-[1.02]'
+                            : 'bg-white hover:bg-orange-50/80 border-orange-200/80 text-gray-800 shadow-2xs hover:border-orange-300 active:scale-[0.99]'
+                        }`}
+                        title={`Select ${method.name} for instant payment`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-base shrink-0">{method.icon}</span>
+                          <div className="min-w-0">
+                            <div className={`font-black text-xs truncate leading-tight ${isSelected ? 'text-white' : 'text-gray-900'}`}>
+                              {method.name}
+                            </div>
+                            <div className={`text-[10px] truncate leading-tight ${isSelected ? 'text-emerald-100 font-medium' : 'text-gray-500'}`}>
+                              {method.subtitle}
+                            </div>
+                          </div>
+                        </div>
+
+                        {isSelected ? (
+                          <span className="shrink-0 w-4 h-4 rounded-full bg-white text-emerald-700 flex items-center justify-center text-[10px] font-black shadow-2xs">
+                            ✓
+                          </span>
+                        ) : (
+                          <span className="shrink-0 text-[9px] bg-orange-100/80 text-orange-800 font-bold px-1.5 py-0.5 rounded">
+                            {method.tag}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
+
+                {/* Active Selection Live Feedback */}
+                {selectedPaymentMethod !== 'all' ? (
+                  <div className="flex items-center justify-between bg-emerald-100/80 border border-emerald-300/80 text-emerald-950 rounded-xl p-2.5 px-3 text-[11px] font-bold animate-fade-in shadow-2xs">
+                    <span className="flex items-center gap-2 truncate">
+                      <span className="w-2 h-2 rounded-full bg-emerald-600 animate-ping shrink-0"></span>
+                      <span className="truncate">
+                        Selected: <strong>{PAYMENT_METHODS.find(m => m.id === selectedPaymentMethod)?.name}</strong> • Direct app launch enabled
+                      </span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPaymentMethod('all')}
+                      className="text-[10px] underline font-extrabold text-emerald-900 hover:text-emerald-950 shrink-0 ml-2 cursor-pointer"
+                    >
+                      Reset (Show All)
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-[10px] text-gray-500 font-medium flex items-center gap-1.5 pt-0.5">
+                    <span>💡 Upar diye gaye kisi bhi app (PhonePe, GPay, Paytm ya Card) par click karein, ya direct neeche button dabayein.</span>
+                  </p>
+                )}
               </div>
 
               {errorMessage && (
@@ -331,12 +419,16 @@ export default function Checkout() {
                   <div className="flex items-center gap-2.5">
                     <Lock size={18} className="text-amber-300" />
                     <span>
-                      {isProcessing ? 'Connecting to Razorpay...' : `PAY ₹${finalPrice} & INSTANT DOWNLOAD`}
+                      {isProcessing
+                        ? 'Connecting to Razorpay...'
+                        : selectedPaymentMethod !== 'all'
+                        ? `PAY ₹${finalPrice} VIA ${PAYMENT_METHODS.find(m => m.id === selectedPaymentMethod)?.name?.toUpperCase()}`
+                        : `PAY ₹${finalPrice} & UNLOCK INSTANT DOWNLOAD`}
                     </span>
                     <Sparkles size={18} className="text-amber-300 group-hover:rotate-12 transition-transform" />
                   </div>
                   <span className="text-[11px] font-bold text-red-100 tracking-normal">
-                    ⚡ ایک کلک پر فوری ڈاؤن لوڈ • Instant PDF Unlock after Payment
+                    🔒 100% Safe Razorpay Gateway • Direct Instant PDF Download Unlocked
                   </span>
                 </button>
 

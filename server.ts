@@ -101,16 +101,29 @@ app.post('/api/create-order', async (req, res) => {
     let orderId = `order_${Date.now()}`;
 
     if (razorpay) {
-      const rzpOrder = await razorpay.orders.create({
-        amount: amountInPaise,
-        currency: 'INR',
-        receipt,
-        notes: {
-          productId,
-          customerId: customerId || 'guest'
-        }
+      try {
+        const rzpOrder = await razorpay.orders.create({
+          amount: amountInPaise,
+          currency: 'INR',
+          receipt,
+          notes: {
+            productId,
+            customerId: customerId || 'guest'
+          }
+        });
+        orderId = rzpOrder.id;
+      } catch (rzpErr: any) {
+        console.error('Razorpay orders.create failed:', rzpErr);
+        return res.status(400).json({
+          error: 'Razorpay order creation failed',
+          details: rzpErr?.error?.description || rzpErr?.message || 'Invalid credentials'
+        });
+      }
+    } else {
+      return res.status(400).json({
+        error: 'Razorpay not configured',
+        details: 'Payment gateway is not configured. Please enter your Razorpay API Key ID and Secret in Admin Panel.'
       });
-      orderId = rzpOrder.id;
     }
 
     // Record pending order in Firestore if db available
@@ -444,14 +457,38 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'healthy', project: 'PDF Master India', time: new Date().toISOString() });
 });
 
-// Serve frontend static files if dist folder exists (e.g. in Cloud Run production deployment)
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distPath = path.resolve(__dirname, 'dist');
 
-if (fs.existsSync(distPath)) {
+// Serve frontend with Vite middlewares in development, or static dist in production
+const isProduction = process.env.NODE_ENV === 'production';
+
+if (!isProduction) {
+  try {
+    const { createServer: createViteServer } = await import('vite');
+    const vite = await createViteServer({
+      server: {
+        middlewareMode: true,
+        hmr: process.env.DISABLE_HMR !== 'true',
+        watch: process.env.DISABLE_HMR === 'true' ? null : {}
+      },
+      appType: 'spa'
+    });
+    app.use(vite.middlewares);
+    console.log('Vite middleware successfully mounted on Express dev server');
+  } catch (viteErr) {
+    console.error('Failed to mount Vite middleware, falling back to dist:', viteErr);
+    if (fs.existsSync(distPath)) {
+      app.use(express.static(distPath));
+      app.use((req, res, next) => {
+        if (req.path.startsWith('/api')) return next();
+        res.sendFile(path.join(distPath, 'index.html'));
+      });
+    }
+  }
+} else if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
-  // SPA Catch-all fallback using middleware without path string (Express 5 compatible)
   app.use((req, res, next) => {
     if (req.path.startsWith('/api')) {
       return next();
