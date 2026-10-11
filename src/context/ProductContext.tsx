@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Product, Order, DownloadLog, Bundle, HeroBannerConfig, HeroStackedCard, Coupon } from '../types';
+import { Product, Order, DownloadLog, Bundle, HeroBannerConfig, HeroStackedCard } from '../types';
 import { INITIAL_PRODUCTS, CATEGORIES_LIST, INITIAL_BUNDLES } from '../data/initialProducts';
 import { db } from '../firebase';
 import { collection, getDocs, setDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
@@ -35,16 +35,9 @@ export const DEFAULT_HERO_CONFIG: HeroBannerConfig = {
   ]
 };
 
-export const INITIAL_COUPONS: Coupon[] = [
-  { id: 'cpn-1', code: 'MASTER10', discountPercent: 10, description: '10% OFF on all PDF Guides & Bundles', isActive: true, createdAt: new Date().toISOString() },
-  { id: 'cpn-2', code: 'FIRST50', discountPercent: 50, description: 'Special 50% Welcome Discount', isActive: true, createdAt: new Date().toISOString() },
-  { id: 'cpn-3', code: 'WELCOME20', discountPercent: 20, description: '20% OFF Special Promo Code', isActive: true, createdAt: new Date().toISOString() }
-];
-
 interface ProductContextType {
   products: Product[];
   bundles: Bundle[];
-  coupons: Coupon[];
   categories: typeof CATEGORIES_LIST;
   cart: { product: Product; quantity: number }[];
   wishlist: string[];
@@ -58,10 +51,6 @@ interface ProductContextType {
   addBundle: (bundle: Omit<Bundle, 'id'>) => Promise<string>;
   updateBundle: (id: string, updated: Partial<Bundle>) => Promise<void>;
   deleteBundle: (id: string) => Promise<void>;
-  addCoupon: (coupon: Omit<Coupon, 'id'>) => Promise<string>;
-  updateCoupon: (id: string, updated: Partial<Coupon>) => Promise<void>;
-  deleteCoupon: (id: string) => Promise<void>;
-  validateCoupon: (code: string) => Coupon | null;
   addToCart: (product: Product) => void;
   removeFromCart: (productId: string) => void;
   clearCart: () => void;
@@ -79,7 +68,6 @@ const ProductContext = createContext<ProductContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY = 'pdf_master_products_v3';
 const BUNDLES_STORAGE_KEY = 'pdf_master_bundles_v1';
-const COUPONS_STORAGE_KEY = 'pdf_master_coupons_v1';
 const CART_STORAGE_KEY = 'pdf_master_cart';
 const WISHLIST_STORAGE_KEY = 'pdf_master_wishlist';
 const ORDERS_STORAGE_KEY = 'pdf_master_orders';
@@ -110,17 +98,6 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     } catch {}
     return INITIAL_BUNDLES;
-  });
-
-  const [coupons, setCoupons] = useState<Coupon[]>(() => {
-    try {
-      const saved = localStorage.getItem(COUPONS_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-      }
-    } catch {}
-    return INITIAL_COUPONS;
   });
 
   const [cart, setCart] = useState<{ product: Product; quantity: number }[]>(() => {
@@ -272,12 +249,6 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [bundles]);
 
   useEffect(() => {
-    try {
-      localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(coupons));
-    } catch (e) {}
-  }, [coupons]);
-
-  useEffect(() => {
     localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
   }, [cart]);
 
@@ -390,58 +361,6 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setBundles((prev) => prev.filter((b) => b.id !== id));
   };
 
-  // Coupon operations
-  const addCoupon = async (couponData: Omit<Coupon, 'id'>): Promise<string> => {
-    const newId = `cpn-${Date.now()}`;
-    const newCoupon: Coupon = {
-      ...couponData,
-      id: newId,
-      code: couponData.code.trim().toUpperCase(),
-      createdAt: new Date().toISOString()
-    };
-    setCoupons((prev) => [newCoupon, ...prev]);
-    try {
-      await setDoc(doc(db, 'coupons', newId), newCoupon);
-    } catch (e) {
-      console.warn('Firestore write coupon failed, saved to local state:', e);
-    }
-    return newId;
-  };
-
-  const updateCoupon = async (id: string, updated: Partial<Coupon>): Promise<void> => {
-    setCoupons((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              ...updated,
-              code: updated.code ? updated.code.trim().toUpperCase() : c.code
-            }
-          : c
-      )
-    );
-    try {
-      await setDoc(doc(db, 'coupons', id), updated, { merge: true });
-    } catch (e) {
-      console.warn('Firestore update coupon failed, saved to local state:', e);
-    }
-  };
-
-  const deleteCoupon = async (id: string): Promise<void> => {
-    setCoupons((prev) => prev.filter((c) => c.id !== id));
-    try {
-      await deleteDoc(doc(db, 'coupons', id));
-    } catch (e) {
-      console.warn('Firestore delete coupon failed, saved to local state:', e);
-    }
-  };
-
-  const validateCoupon = (code: string): Coupon | null => {
-    const clean = code.trim().toUpperCase();
-    const matched = coupons.find((c) => c.code === clean && c.isActive);
-    return matched || null;
-  };
-
   const addToCart = (product: Product) => {
     setCart((prev) => {
       const exists = prev.find((item) => item.product.id === product.id);
@@ -542,7 +461,6 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
       value={{
         products,
         bundles,
-        coupons,
         categories: CATEGORIES_LIST,
         cart,
         wishlist,
@@ -556,10 +474,6 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         addBundle,
         updateBundle,
         deleteBundle,
-        addCoupon,
-        updateCoupon,
-        deleteCoupon,
-        validateCoupon,
         addToCart,
         removeFromCart,
         clearCart,

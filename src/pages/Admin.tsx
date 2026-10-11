@@ -34,12 +34,11 @@ import {
   Zap,
   Copy,
   Share2,
-  CheckCheck,
-  Tag
+  CheckCheck
 } from 'lucide-react';
 import { useProducts } from '../context/ProductContext';
 import { useAuth } from '../context/AuthContext';
-import { Product, Bundle, HeroStackedCard, HeroBannerConfig, Coupon } from '../types';
+import { Product, Bundle, HeroStackedCard, HeroBannerConfig } from '../types';
 import { createBookCoverSvg, createSamplePageSvg } from '../data/coverImages';
 
 export default function Admin() {
@@ -55,10 +54,6 @@ export default function Admin() {
     addBundle,
     updateBundle,
     deleteBundle,
-    coupons,
-    addCoupon,
-    updateCoupon,
-    deleteCoupon,
     orders, 
     downloadLogs, 
     categories,
@@ -85,8 +80,8 @@ export default function Admin() {
   };
 
   const requestedTab = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState<'products' | 'bundles' | 'orders' | 'logs' | 'hero' | 'coupons'>(
-    requestedTab === 'hero' ? 'hero' : requestedTab === 'coupons' ? 'coupons' : 'products'
+  const [activeTab, setActiveTab] = useState<'products' | 'bundles' | 'orders' | 'logs' | 'hero'>(
+    requestedTab === 'hero' ? 'hero' : 'products'
   );
 
   // Hero Banner Customization state
@@ -203,7 +198,7 @@ export default function Admin() {
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
   // In-app Delete Confirmation Modal (NO window.confirm)
-  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: string; title: string; type: 'product' | 'bundle' | 'coupon' } | null>(null);
+  const [deleteConfirmTarget, setDeleteConfirmTarget] = useState<{ id: string; title: string; type: 'product' | 'bundle' } | null>(null);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
 
   // Bundle Add/Edit Modal
@@ -283,66 +278,6 @@ export default function Admin() {
     setCopiedKey(key);
     showNotify(`✓ ${label} copied to clipboard!`);
     setTimeout(() => setCopiedKey(null), 2500);
-  };
-
-  // Coupon Management State & Handlers
-  const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
-  const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
-  const [couponCode, setCouponCode] = useState('');
-  const [couponDiscountPercent, setCouponDiscountPercent] = useState<number>(20);
-  const [couponDescription, setCouponDescription] = useState('');
-  const [couponIsActive, setCouponIsActive] = useState<boolean>(true);
-
-  const handleOpenAddCouponModal = () => {
-    setEditingCoupon(null);
-    setCouponCode('');
-    setCouponDiscountPercent(20);
-    setCouponDescription('');
-    setCouponIsActive(true);
-    setIsCouponModalOpen(true);
-  };
-
-  const handleOpenEditCouponModal = (c: Coupon) => {
-    setEditingCoupon(c);
-    setCouponCode(c.code);
-    setCouponDiscountPercent(c.discountPercent);
-    setCouponDescription(c.description || '');
-    setCouponIsActive(c.isActive);
-    setIsCouponModalOpen(true);
-  };
-
-  const handleSaveCoupon = async (e: React.FormEvent) => {
-    e.preventDefault();
-    const clean = couponCode.trim().toUpperCase();
-    if (!clean) {
-      showNotify('⚠️ Coupon code khali nahi ho sakta');
-      return;
-    }
-
-    if (editingCoupon) {
-      await updateCoupon(editingCoupon.id, {
-        code: clean,
-        discountPercent: Number(couponDiscountPercent),
-        description: couponDescription.trim() || `${couponDiscountPercent}% Discount Coupon`,
-        isActive: couponIsActive
-      });
-      showNotify(`✓ Coupon "${clean}" update ho gaya!`);
-    } else {
-      await addCoupon({
-        code: clean,
-        discountPercent: Number(couponDiscountPercent),
-        description: couponDescription.trim() || `${couponDiscountPercent}% Discount Coupon`,
-        isActive: couponIsActive
-      });
-      showNotify(`✓ Naya Coupon "${clean}" (${couponDiscountPercent}% OFF) successfully create ho gaya!`);
-    }
-
-    setIsCouponModalOpen(false);
-  };
-
-  const handleToggleCouponActive = async (c: Coupon) => {
-    await updateCoupon(c.id, { isActive: !c.isActive });
-    showNotify(`✓ Coupon "${c.code}" ab ${!c.isActive ? 'ACTIVE' : 'INACTIVE'} hai!`);
   };
 
   // Handle Cover Image File Selection from Mobile Gallery / PC
@@ -550,9 +485,6 @@ export default function Admin() {
     if (deleteConfirmTarget.type === 'product') {
       await deleteProduct(deleteConfirmTarget.id);
       showNotify(`✓ Product "${deleteConfirmTarget.title}" deleted.`);
-    } else if (deleteConfirmTarget.type === 'coupon') {
-      await deleteCoupon(deleteConfirmTarget.id);
-      showNotify(`✓ Coupon "${deleteConfirmTarget.title}" deleted.`);
     } else {
       await deleteBundle(deleteConfirmTarget.id);
       showNotify(`✓ Bundle "${deleteConfirmTarget.title}" deleted.`);
@@ -1101,17 +1033,6 @@ export default function Admin() {
           >
             <Palette size={14} className={activeTab === 'hero' ? 'text-white' : 'text-blue-600'} />
             Hero Banner &amp; Overlapping PDFs
-          </button>
-          <button
-            onClick={() => setActiveTab('coupons')}
-            className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
-              activeTab === 'coupons'
-                ? 'bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-400/50'
-                : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-200'
-            }`}
-          >
-            <Tag size={14} className={activeTab === 'coupons' ? 'text-white' : 'text-emerald-600'} />
-            Coupon Codes &amp; Discounts ({coupons.length})
           </button>
         </div>
 
@@ -2012,161 +1933,6 @@ export default function Admin() {
                 </div>
               </div>
             </div>
-        {/* TAB 6: COUPON CODES & MARKETING DISCOUNTS */}
-        {activeTab === 'coupons' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-2xl border border-gray-200/80 shadow-xs overflow-hidden">
-              <div className="p-4 sm:p-6 border-b border-gray-200 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="p-2 bg-emerald-100 text-emerald-800 rounded-xl">
-                      <Tag size={18} />
-                    </span>
-                    <h3 className="font-black text-base sm:text-lg text-gray-900">
-                      Coupon Codes &amp; Marketing Discounts
-                    </h3>
-                  </div>
-                  <p className="text-xs text-gray-500 mt-1 max-w-2xl">
-                    Apne custom promo codes release karein (jaise MASTER10, META50, RAMADAN30). Website checkout inhen automatically detect karegi aur exact discount percent calculate karke apply karegi.
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={handleOpenAddCouponModal}
-                  className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs px-4 py-2.5 rounded-xl shadow-md transition-all flex items-center gap-1.5 cursor-pointer shrink-0"
-                >
-                  <Plus size={16} /> Create New Coupon Code
-                </button>
-              </div>
-
-              {/* Coupon Statistics Banner */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 p-4 bg-gray-50/70 border-b border-gray-200">
-                <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs">
-                  <div className="text-[10px] uppercase font-bold text-gray-500">Total Coupons</div>
-                  <div className="text-xl font-black text-gray-900 mt-0.5">{coupons.length}</div>
-                </div>
-                <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs">
-                  <div className="text-[10px] uppercase font-bold text-gray-500">Active Coupons</div>
-                  <div className="text-xl font-black text-emerald-700 mt-0.5">
-                    {coupons.filter((c) => c.isActive).length}
-                  </div>
-                </div>
-                <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs">
-                  <div className="text-[10px] uppercase font-bold text-gray-500">Max Discount</div>
-                  <div className="text-xl font-black text-orange-600 mt-0.5">
-                    {coupons.length > 0 ? Math.max(...coupons.map((c) => c.discountPercent)) : 0}% OFF
-                  </div>
-                </div>
-                <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs">
-                  <div className="text-[10px] uppercase font-bold text-gray-500">Ready for Ads</div>
-                  <div className="text-xs font-bold text-blue-600 mt-1 flex items-center gap-1">
-                    <Sparkles size={13} /> Meta &amp; Social Ads
-                  </div>
-                </div>
-              </div>
-
-              {/* Coupons List */}
-              <div className="p-4 sm:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {coupons.map((c) => (
-                  <div
-                    key={c.id}
-                    className={`rounded-2xl border p-4.5 transition-all flex flex-col justify-between relative overflow-hidden ${
-                      c.isActive
-                        ? 'bg-gradient-to-br from-white to-emerald-50/20 border-emerald-200 shadow-sm hover:shadow-md'
-                        : 'bg-gray-50 border-gray-200 opacity-75'
-                    }`}
-                  >
-                    {/* Top Stripe */}
-                    <div className={`absolute top-0 inset-x-0 h-1.5 ${c.isActive ? 'bg-gradient-to-r from-emerald-500 to-teal-500' : 'bg-gray-300'}`} />
-
-                    <div>
-                      <div className="flex items-start justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-mono text-base font-black tracking-wider text-gray-900 bg-gray-100 px-2.5 py-1 rounded-lg border border-gray-200">
-                            {c.code}
-                          </span>
-                        </div>
-                        <span className="bg-emerald-600 text-white text-xs font-black px-2.5 py-1 rounded-full shadow-2xs">
-                          {c.discountPercent}% OFF
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-gray-600 mt-2 line-clamp-2">
-                        {c.description || `${c.discountPercent}% discount coupon for store visitors.`}
-                      </p>
-
-                      <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100 text-[11px]">
-                        <span className={`inline-flex items-center gap-1 font-extrabold px-2 py-0.5 rounded-md ${
-                          c.isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-200 text-gray-700'
-                        }`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${c.isActive ? 'bg-emerald-600' : 'bg-gray-500'}`} />
-                          {c.isActive ? 'Active on Checkout' : 'Paused / Inactive'}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center justify-between gap-2 pt-3 mt-3 border-t border-gray-100">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard.writeText(c.code);
-                          showNotify(`✓ Coupon "${c.code}" copied for Ads!`);
-                        }}
-                        className="px-2.5 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
-                        title="Copy code to clipboard"
-                      >
-                        <Copy size={12} /> Copy
-                      </button>
-
-                      <div className="flex items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleCouponActive(c)}
-                          className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-colors cursor-pointer ${
-                            c.isActive
-                              ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200'
-                              : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200'
-                          }`}
-                        >
-                          {c.isActive ? 'Pause' : 'Activate'}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEditCouponModal(c)}
-                          className="px-2.5 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
-                        >
-                          <Edit size={12} /> Edit
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setDeleteConfirmTarget({ id: c.id, title: c.code, type: 'coupon' })}
-                          className="p-1.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg transition-colors cursor-pointer"
-                          title="Delete Coupon"
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {coupons.length === 0 && (
-                <div className="text-center py-12 text-gray-400">
-                  <Tag size={32} className="mx-auto mb-2 opacity-50" />
-                  <p className="font-bold text-sm">Abhi tak koi coupon code nahi banaya gaya.</p>
-                  <button
-                    type="button"
-                    onClick={handleOpenAddCouponModal}
-                    className="mt-3 text-xs font-bold text-emerald-700 hover:underline"
-                  >
-                    + Pehla Coupon Code Banayein
-                  </button>
-                </div>
-              )}
-            </div>
           </div>
         )}
       </main>
@@ -3035,132 +2801,6 @@ export default function Admin() {
                 Close (Band Karein)
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* 7. ADD / EDIT COUPON MODAL */}
-      {isCouponModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-xs animate-fade-in">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl animate-scale-in space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-gray-100">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                  <Tag size={16} />
-                </div>
-                <h3 className="text-base font-black text-gray-900">
-                  {editingCoupon ? 'Edit Coupon Code' : 'Create New Coupon Code'}
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsCouponModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
-                <X size={20} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveCoupon} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">
-                  Coupon Code (Bina space ke, e.g. MASTER10, EID50, META25)
-                </label>
-                <input
-                  type="text"
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value.toUpperCase().replace(/\s+/g, ''))}
-                  required
-                  placeholder="e.g. DISCOUNT30"
-                  className="w-full px-3 py-2.5 border rounded-xl text-sm font-mono font-black uppercase outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-gray-700">
-                    Discount Percentage ({couponDiscountPercent}%)
-                  </label>
-                  <span className="text-emerald-700 font-black">{couponDiscountPercent}% OFF</span>
-                </div>
-                <input
-                  type="number"
-                  min="1"
-                  max="95"
-                  value={couponDiscountPercent}
-                  onChange={(e) => setCouponDiscountPercent(Number(e.target.value))}
-                  required
-                  className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-emerald-500 mb-2"
-                />
-                <div className="flex items-center gap-1.5">
-                  <span className="text-[10px] text-gray-500">Quick:</span>
-                  {[10, 20, 30, 50, 70].map((pct) => (
-                    <button
-                      key={pct}
-                      type="button"
-                      onClick={() => setCouponDiscountPercent(pct)}
-                      className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-colors cursor-pointer ${
-                        couponDiscountPercent === pct
-                          ? 'bg-emerald-600 text-white border-emerald-600'
-                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
-                      }`}
-                    >
-                      {pct}%
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">
-                  Description / Ad Note (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={couponDescription}
-                  onChange={(e) => setCouponDescription(e.target.value)}
-                  placeholder="e.g. Meta Facebook Ad campaign promo code"
-                  className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-emerald-500"
-                />
-              </div>
-
-              <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-200 text-[11px] text-emerald-950 space-y-1">
-                <div className="font-bold">Live Checkout Preview:</div>
-                <div>Agar customer ₹149 ka order karta hai:</div>
-                <div className="font-mono text-emerald-800">
-                  ₹149 - {couponDiscountPercent}% (₹{Math.round((149 * couponDiscountPercent) / 100)}) = <strong>₹{Math.max(9, Math.round(149 - (149 * couponDiscountPercent) / 100))} Final Price</strong>
-                </div>
-              </div>
-
-              <label className="flex items-center gap-2 pt-1 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={couponIsActive}
-                  onChange={(e) => setCouponIsActive(e.target.checked)}
-                  className="rounded text-emerald-600 focus:ring-emerald-500"
-                />
-                <span className="text-xs font-bold text-gray-800">
-                  Coupon ko website checkout par active rakhein
-                </span>
-              </label>
-
-              <div className="pt-3 flex items-center justify-end gap-2 border-t border-gray-100">
-                <button
-                  type="button"
-                  onClick={() => setIsCouponModalOpen(false)}
-                  className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-bold text-xs hover:bg-gray-50 cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Check size={14} className="stroke-[3]" />
-                  <span>{editingCoupon ? '✓ Save Changes' : '✓ Create & Release Coupon'}</span>
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

@@ -21,7 +21,7 @@ import { useAuth } from '../context/AuthContext';
 export default function Checkout() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { products, bundles, addOrder, coupons, validateCoupon } = useProducts();
+  const { products, bundles, addOrder } = useProducts();
   const { user } = useAuth();
 
   // Find either matching bundle or matching single product
@@ -52,23 +52,18 @@ export default function Checkout() {
   const handleApplyCoupon = (e: React.FormEvent) => {
     e.preventDefault();
     const cleanCode = couponCode.trim().toUpperCase();
-    if (!cleanCode) {
-      setCouponError('Please enter a coupon code.');
-      return;
-    }
-    const matched = validateCoupon(cleanCode);
-    if (matched) {
-      setAppliedCoupon({ code: matched.code, discountPercent: matched.discountPercent });
+    if (cleanCode === 'MASTER10') {
+      setAppliedCoupon({ code: 'MASTER10', discountPercent: 10 });
+      setCouponError(null);
+    } else if (cleanCode === 'FIRST50') {
+      setAppliedCoupon({ code: 'FIRST50', discountPercent: 50 });
+      setCouponError(null);
+    } else if (cleanCode === 'WELCOME20') {
+      setAppliedCoupon({ code: 'WELCOME20', discountPercent: 20 });
       setCouponError(null);
     } else {
-      setCouponError(`Invalid or inactive coupon code "${cleanCode}".`);
+      setCouponError('Invalid coupon code. Try MASTER10 or FIRST50.');
     }
-  };
-
-  const handleRemoveCoupon = () => {
-    setAppliedCoupon(null);
-    setCouponCode('');
-    setCouponError(null);
   };
 
   const handleCompleteOrder = async (payId: string, orderId: string) => {
@@ -357,59 +352,22 @@ export default function Checkout() {
                   value={couponCode}
                   onChange={(e) => setCouponCode(e.target.value)}
                   placeholder="Coupon code (e.g. MASTER10)"
-                  className="flex-1 px-3 py-1.5 text-xs uppercase border border-gray-300 rounded-lg outline-none font-mono focus:border-emerald-500"
+                  className="flex-1 px-3 py-1.5 text-xs uppercase border border-gray-300 rounded-lg outline-none font-mono"
                 />
                 <button
                   type="submit"
-                  className="bg-gray-900 text-white text-xs font-bold px-4 py-1.5 rounded-lg hover:bg-black transition-colors cursor-pointer"
+                  className="bg-gray-900 text-white text-xs font-bold px-3 py-1.5 rounded-lg hover:bg-black transition-colors"
                 >
                   Apply
                 </button>
               </form>
-
-              {/* Quick Coupon Suggestions from Admin Active Coupons */}
-              {!appliedCoupon && coupons.filter((c) => c.isActive).length > 0 && (
-                <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                  <span className="text-[10px] text-gray-500 font-semibold">Active Offers:</span>
-                  {coupons
-                    .filter((c) => c.isActive)
-                    .slice(0, 3)
-                    .map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => {
-                          setCouponCode(c.code);
-                          setAppliedCoupon({ code: c.code, discountPercent: c.discountPercent });
-                          setCouponError(null);
-                        }}
-                        className="text-[10px] font-mono font-bold bg-amber-50 text-amber-900 border border-amber-300 px-2 py-0.5 rounded-md hover:bg-amber-100 transition-colors cursor-pointer"
-                        title={c.description}
-                      >
-                        {c.code} ({c.discountPercent}% OFF)
-                      </button>
-                    ))}
-                </div>
-              )}
-
               {appliedCoupon && (
-                <div className="text-[11px] text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-xl p-2.5 font-bold mt-2 flex items-center justify-between">
-                  <div className="flex items-center gap-1.5">
-                    <Check size={14} className="stroke-[3] text-emerald-600 shrink-0" />
-                    <span>Coupon <strong>{appliedCoupon.code}</strong> Applied ({appliedCoupon.discountPercent}% OFF • ₹{discountAmount} Bachat)!</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleRemoveCoupon}
-                    className="text-red-600 hover:text-red-800 text-[10px] font-bold underline ml-2 cursor-pointer"
-                  >
-                    Remove
-                  </button>
+                <div className="text-[11px] text-emerald-600 font-bold mt-1 flex items-center gap-1">
+                  <Check size={12} /> Coupon {appliedCoupon.code} applied ({appliedCoupon.discountPercent}% OFF)!
                 </div>
               )}
-
               {couponError && (
-                <div className="text-[11px] text-red-600 mt-1 font-medium">
+                <div className="text-[11px] text-red-600 mt-1">
                   {couponError}
                 </div>
               )}
