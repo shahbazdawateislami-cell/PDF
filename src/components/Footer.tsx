@@ -76,9 +76,14 @@ export const Footer: React.FC = () => {
             <p className="flex items-center gap-2">
               <Mail size={14} className="text-gray-400" /> support@pdfmaster.in
             </p>
-            <p className="flex items-center gap-2">
-              <Phone size={14} className="text-gray-400" /> +91 98765 43210 (WhatsApp)
-            </p>
+            <a
+              href="https://wa.me/917079988808?text=Hi%20PDF%20Master%20India,%20I%20have%20a%20question%20about%20ordering%20a%20PDF"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-2 text-emerald-700 hover:text-emerald-800 font-bold"
+            >
+              <Phone size={14} className="text-emerald-600" /> +91 70799 88808 (WhatsApp &amp; Support)
+            </a>
           </div>
         </div>
 
@@ -98,6 +103,16 @@ export const Footer: React.FC = () => {
         <div>
           <h4 className="font-bold text-xs uppercase tracking-wider text-gray-900 mb-3">Customer Care</h4>
           <ul className="text-xs text-gray-600 space-y-2">
+            <li>
+              <a
+                href="https://wa.me/917079988808?text=Hi%20PDF%20Master%20India,%20I%20need%20help"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-emerald-700 hover:text-emerald-800 font-bold flex items-center gap-1.5"
+              >
+                <span>💬 WhatsApp Support (+91 70799 88808)</span>
+              </a>
+            </li>
             <li>
               <button onClick={() => setActiveModal('contact')} className="hover:text-orange-600">
                 Contact Us
@@ -152,7 +167,7 @@ export const Footer: React.FC = () => {
       </div>
 
       <div className="border-t border-gray-100 py-4 text-center text-xs text-gray-500">
-        © 2026 PDF Master India. All rights reserved. 100% Secure Razorpay Checkout.
+        © 2026 PDF Master India. All rights reserved. 100% Secure Razorpay Checkout. • Helpline: +91 70799 88808
       </div>
 
       {/* Policy Modals */}
@@ -175,11 +190,40 @@ export const Footer: React.FC = () => {
             <div className="text-xs text-gray-600 space-y-3 leading-relaxed">
               {activeModal === 'contact' && (
                 <>
-                  <p>Have questions about your order or need assistance downloading your PDF? Our support team is here to assist you.</p>
-                  <div className="bg-gray-50 p-4 rounded-xl space-y-2 font-medium">
-                    <p>📧 Email: support@pdfmaster.in</p>
-                    <p>💬 WhatsApp Support: +91 98765 43210 (10:00 AM - 8:00 PM IST)</p>
-                    <p>📍 Location: New Delhi, India</p>
+                  <p>Have questions about your order or need assistance downloading your PDF? Our support team is here to assist you 24/7.</p>
+                  <div className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-200/80 space-y-2.5 font-medium text-gray-800">
+                    <div className="flex items-center justify-between pb-2 border-b border-emerald-200/60">
+                      <div>
+                        <p className="font-bold text-gray-900 flex items-center gap-1.5">
+                          <span>💬</span> WhatsApp Direct Helpline:
+                        </p>
+                        <a 
+                          href="https://wa.me/917079988808?text=Hi%20PDF%20Master%20India,%20I%20have%20a%20query%20about%20ordering%20a%20PDF"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-base font-black text-emerald-700 hover:underline"
+                        >
+                          +91 70799 88808
+                        </a>
+                      </div>
+                      <a 
+                        href="https://wa.me/917079988808?text=Hi%20PDF%20Master%20India,%20I%20have%20a%20query%20about%20ordering%20a%20PDF"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 py-2 rounded-xl shadow-xs transition-colors"
+                      >
+                        Open WhatsApp
+                      </a>
+                    </div>
+                    <p className="flex items-center gap-2">
+                      <span>📞</span> Direct Call: <a href="tel:+917079988808" className="font-bold text-gray-900 hover:underline">+91 70799 88808</a>
+                    </p>
+                    <p className="flex items-center gap-2">
+                      <span>📧</span> Email Support: <span className="font-bold text-gray-900">support@pdfmaster.in</span>
+                    </p>
+                    <p className="text-[11px] text-emerald-800 bg-white/80 p-2 rounded-lg border border-emerald-100">
+                      ⚡ Quick Response Guarantee: Send a WhatsApp message to <strong>+91 70799 88808</strong> for instant PDF links, order receipts, or queries.
+                    </p>
                   </div>
                 </>
               )}

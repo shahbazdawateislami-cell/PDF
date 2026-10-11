@@ -9,27 +9,25 @@ interface AuthContextType {
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   toggleAdminMode: (enable?: boolean) => void;
+  adminLogin: (id: string, pass: string) => boolean;
   adminPinLogin: (pin: string) => boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const ADMIN_EMAIL = 'shahbazdawateislami@gmail.com';
-const ADMIN_PIN = '1234';
+// Dedicated Admin Credentials as requested: ID: 7079988808, Password: Shahbaz
+export const ADMIN_ID = '7079988808';
+export const ADMIN_PASSWORD = 'Shahbaz';
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isAdminMode, setIsAdminMode] = useState<boolean>(() => {
-    return localStorage.getItem('pdf_master_admin_mode') === 'true';
+  const [isAdmin, setIsAdmin] = useState<boolean>(() => {
+    return localStorage.getItem('pdf_master_admin_session') === 'true';
   });
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      if (currentUser?.email === ADMIN_EMAIL) {
-        setIsAdminMode(true);
-        localStorage.setItem('pdf_master_admin_mode', 'true');
-      }
     });
     return () => unsub();
   }, []);
@@ -40,8 +38,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await signInWithPopup(auth, provider);
     } catch (err) {
       console.error('Google Sign-In error:', err);
-      // Fallback guest login if popup fails in iframe
-      alert('Google Sign-In popup could not complete. You can also use Admin Mode or continue as Guest.');
     }
   };
 
@@ -50,38 +46,54 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await signOut(auth);
     } catch {}
     setUser(null);
-    setIsAdminMode(false);
-    localStorage.removeItem('pdf_master_admin_mode');
+    setIsAdmin(false);
+    localStorage.removeItem('pdf_master_admin_session');
   };
 
   const toggleAdminMode = (enable?: boolean) => {
-    setIsAdminMode((prev) => {
+    setIsAdmin((prev) => {
       const next = enable !== undefined ? enable : !prev;
-      localStorage.setItem('pdf_master_admin_mode', next ? 'true' : 'false');
+      if (next) {
+        localStorage.setItem('pdf_master_admin_session', 'true');
+      } else {
+        localStorage.removeItem('pdf_master_admin_session');
+      }
       return next;
     });
   };
 
-  const adminPinLogin = (pin: string) => {
-    if (pin === ADMIN_PIN || pin === 'pdfmaster') {
-      setIsAdminMode(true);
-      localStorage.setItem('pdf_master_admin_mode', 'true');
+  const adminLogin = (id: string, pass: string): boolean => {
+    // Strict validation: ID: 7079988808 & Password: Shahbaz
+    const cleanId = (id || '').trim().replace(/[\s+-]/g, '');
+    const cleanPass = (pass || '').trim();
+    
+    // Accept standard 7079988808 or with country code 917079988808
+    const idMatches = cleanId === ADMIN_ID || cleanId === `91${ADMIN_ID}`;
+    const passMatches = cleanPass === ADMIN_PASSWORD;
+
+    if (idMatches && passMatches) {
+      setIsAdmin(true);
+      localStorage.setItem('pdf_master_admin_session', 'true');
       return true;
     }
     return false;
   };
 
-  const isAdmin = isAdminMode || user?.email === ADMIN_EMAIL;
+  // Backward compatibility: pin bypass disabled as requested ("iske alava Kisi chij Se kholna nahin chahie")
+  const adminPinLogin = (_pin: string): boolean => {
+    return false;
+  };
 
   return (
     <AuthContext.Provider
       value={{
         user,
         isAdmin,
-        isAdminMode,
+        isAdminMode: isAdmin,
         loginWithGoogle,
         logout,
         toggleAdminMode,
+        adminLogin,
         adminPinLogin
       }}
     >

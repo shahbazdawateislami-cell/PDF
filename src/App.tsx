@@ -12,6 +12,7 @@ import Admin from './pages/Admin';
 import Purchases from './pages/Purchases';
 import Wishlist from './pages/Wishlist';
 import Cart from './pages/Cart';
+import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
 
 export default function App() {
   return (
@@ -29,6 +30,7 @@ export default function App() {
             <Route path="/wishlist" element={<Wishlist />} />
             <Route path="/cart" element={<Cart />} />
           </Routes>
+          <WhatsAppFloatingButton />
         </Router>
       </ProductProvider>
     </AuthProvider>

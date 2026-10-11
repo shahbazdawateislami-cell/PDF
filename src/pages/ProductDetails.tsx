@@ -12,16 +12,20 @@ import {
   HelpCircle, 
   MessageSquare, 
   ChevronRight,
-  ZoomIn
+  ZoomIn,
+  Zap,
+  Sparkles,
+  MessageCircle,
+  Phone,
+  Share2,
+  Link2
 } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
 import { Carousel } from '../components/Carousel';
 import { ProductCard } from '../components/ProductCard';
-import { VideoPlayerModal } from '../components/VideoPlayerModal';
 import { ImageLightboxModal } from '../components/ImageLightboxModal';
 import { useProducts } from '../context/ProductContext';
-import { ProductVideo } from '../types';
 
 export default function ProductDetails() {
   const { id } = useParams<{ id: string }>();
@@ -29,7 +33,6 @@ export default function ProductDetails() {
   const { products, isWishlisted, toggleWishlist } = useProducts();
 
   const [activeTab, setActiveTab] = useState<'desc' | 'toc' | 'reviews' | 'faq'>('desc');
-  const [selectedVideo, setSelectedVideo] = useState<ProductVideo | null>(null);
   const [lightboxIndex, setLightboxIndex] = useState<number>(0);
   const [isLightboxOpen, setIsLightboxOpen] = useState<boolean>(false);
   const [lightboxImages, setLightboxImages] = useState<string[]>([]);
@@ -175,9 +178,16 @@ export default function ProductDetails() {
               <div className="pt-2 space-y-3">
                 <button
                   onClick={() => navigate(`/checkout/${product.id}`)}
-                  className="w-full bg-red-600 hover:bg-red-700 active:scale-[0.99] text-white font-black py-3.5 px-6 rounded-xl text-base tracking-wide shadow-lg hover:shadow-red-500/20 transition-all flex items-center justify-center gap-2"
+                  className="w-full bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-700 hover:to-rose-700 active:scale-[0.98] text-white font-black py-4.5 sm:py-5 px-8 rounded-2xl text-base sm:text-lg tracking-wide shadow-xl shadow-red-500/30 ring-4 ring-red-100 hover:ring-red-200 transition-all flex flex-col items-center justify-center gap-1 group cursor-pointer"
                 >
-                  Buy Now
+                  <div className="flex items-center gap-2">
+                    <Zap size={22} className="text-amber-300 fill-amber-300 group-hover:scale-110 transition-transform" />
+                    <span>BUY NOW FOR ₹{product.price}</span>
+                    <Sparkles size={18} className="text-amber-300" />
+                  </div>
+                  <span className="text-xs text-red-100 font-bold tracking-normal">
+                    ⚡ Instant Download Link • فوری حاصل کریں (One-Click Checkout)
+                  </span>
                 </button>
 
                 <button
@@ -192,7 +202,49 @@ export default function ProductDetails() {
                   {wishlisted ? 'Saved in Wishlist' : 'Add to Wishlist'}
                 </button>
 
-                <div className="flex items-center justify-center gap-6 pt-2 text-[11px] text-gray-500 font-medium">
+                {/* Direct WhatsApp Query Button */}
+                <a
+                  href={`https://wa.me/917079988808?text=Hi%20PDF%20Master%20India,%20I%20have%20a%20question%20about%20"${encodeURIComponent(product.title)}"%20(Price:%20₹${product.price})`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center justify-center gap-2 transition-colors shadow-2xs"
+                >
+                  <MessageCircle size={15} className="fill-emerald-600 text-emerald-600" />
+                  <span>Ask or Order via WhatsApp (+91 70799 88808)</span>
+                </a>
+
+                {/* Copy Ad / Direct Buy Link Button */}
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = window.location.href;
+                      navigator.clipboard.writeText(url);
+                      alert(`✓ Product Landing Link copied for Meta Ads / Share:\n${url}`);
+                    }}
+                    className="py-2 px-3 rounded-xl text-[11px] font-bold bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    title="Copy Product Landing Page Link"
+                  >
+                    <Link2 size={13} className="text-gray-500" />
+                    <span>Copy Page Link</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const url = `${window.location.origin}/checkout/${product.id}`;
+                      navigator.clipboard.writeText(url);
+                      alert(`✓ Direct Checkout Link copied for Meta Ads:\n${url}`);
+                    }}
+                    className="py-2 px-3 rounded-xl text-[11px] font-bold bg-orange-50 hover:bg-orange-100 text-orange-800 border border-orange-200 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    title="Copy Direct Buy Checkout Link"
+                  >
+                    <Zap size={13} className="text-orange-600 fill-orange-600" />
+                    <span>Copy Buy Link</span>
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-center gap-6 pt-1 text-[11px] text-gray-500 font-medium">
                   <span className="flex items-center gap-1">
                     <ShieldCheck size={14} className="text-emerald-600" /> Razorpay Verified
                   </span>
@@ -283,9 +335,10 @@ export default function ProductDetails() {
 
             <button
               onClick={() => navigate(`/checkout/${product.id}`)}
-              className="w-full sm:w-auto bg-red-600 hover:bg-red-700 active:scale-95 text-white font-black text-xs sm:text-sm px-6 py-2.5 rounded-xl shadow-md transition-all flex items-center justify-center gap-1.5 shrink-0"
+              className="w-full sm:w-auto bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-700 hover:to-rose-700 active:scale-95 text-white font-black text-sm sm:text-base px-8 py-3.5 rounded-2xl shadow-lg shadow-red-500/25 ring-2 ring-red-200 transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
             >
-              Buy Now for ₹{product.price}
+              <Zap size={16} className="text-amber-300 fill-amber-300" />
+              <span>Buy Now for ₹{product.price}</span>
             </button>
           </div>
         </section>
@@ -356,60 +409,7 @@ export default function ProductDetails() {
           />
         </section>
 
-        {/* 4. PRODUCT VIDEOS SECTION CAROUSEL */}
-        {product.videos && product.videos.length > 0 && (
-          <section className="bg-white rounded-3xl p-5 sm:p-7 border border-gray-200/80 shadow-xs">
-            <div className="flex justify-between items-center mb-4">
-              <div>
-                <h2 className="text-lg sm:text-xl font-black text-gray-900 tracking-tight">
-                  Product Videos
-                </h2>
-                <p className="text-xs text-gray-500">Watch introduction and tutorial videos</p>
-              </div>
-            </div>
-
-            <Carousel
-              items={product.videos.map((vid) => (
-                <div
-                  key={vid.id}
-                  onClick={() => setSelectedVideo(vid)}
-                  className="cursor-pointer group relative rounded-2xl overflow-hidden border border-gray-800 bg-gray-900 shadow-md hover:shadow-xl transition-all"
-                >
-                  <div className="relative aspect-video w-full overflow-hidden">
-                    <img
-                      src={vid.thumbnail}
-                      alt={vid.title}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-80"
-                    />
-                    {/* Play Button Overlay */}
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-12 h-12 rounded-full bg-black/60 group-hover:bg-red-600 text-white flex items-center justify-center transition-colors shadow-lg border border-white/20">
-                        <Play size={20} className="fill-white ml-0.5" />
-                      </div>
-                    </div>
-                    {/* Duration Badge */}
-                    <span className="absolute bottom-2 right-2 bg-black/75 text-white text-[10px] font-bold px-2 py-0.5 rounded">
-                      {vid.duration}
-                    </span>
-                  </div>
-
-                  <div className="p-3 bg-gray-900 text-white">
-                    <h4 className="font-bold text-xs truncate group-hover:text-orange-400 transition-colors">
-                      {vid.title}
-                    </h4>
-                  </div>
-                </div>
-              ))}
-              itemsToShow={{ mobile: 1.5, tablet: 3, desktop: 3 }}
-              autoScroll={true}
-              autoScrollInterval={4500}
-              showArrows={true}
-              showDots={false}
-            />
-          </section>
-        )}
-
-        {/* 5. TABS SECTION (Description, Table of Contents, Reviews, FAQ) */}
+        {/* 4. TABS SECTION (Description, Table of Contents, Reviews, FAQ) */}
         <section className="bg-white rounded-3xl p-5 sm:p-8 border border-gray-200/80 shadow-xs">
           {/* Tabs Navigation */}
           <div className="flex border-b border-gray-200 gap-2 sm:gap-6 overflow-x-auto pb-px">
@@ -567,6 +567,17 @@ export default function ProductDetails() {
                     </p>
                   </div>
                 ))}
+
+                {/* WhatsApp Support Card in FAQ */}
+                <div className="p-4 rounded-xl bg-emerald-50/80 border border-emerald-200">
+                  <h5 className="font-bold text-xs sm:text-sm text-emerald-950 mb-1 flex items-center gap-1.5">
+                    <MessageCircle size={15} className="fill-emerald-600 text-emerald-600" />
+                    کیا میں واٹس ایپ پر براہ راست رہنمائی یا فائل لے سکتا ہوں؟
+                  </h5>
+                  <p className="text-xs text-emerald-800 leading-relaxed">
+                    جی ہاں! آپ کسی بھی وقت ہمارے ہیلپ لائن نمبر <a href="https://wa.me/917079988808" target="_blank" rel="noopener noreferrer" className="font-bold underline text-emerald-900">+91 70799 88808</a> پر واٹس ایپ یا کال کر کے ڈاؤن لوڈ لنک، نمونہ صفحات یا معلومات حاصل کر سکتے ہیں۔
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -583,11 +594,6 @@ export default function ProductDetails() {
         title={product.title}
       />
 
-      {/* Video Player Modal */}
-      <VideoPlayerModal
-        video={selectedVideo}
-        onClose={() => setSelectedVideo(null)}
-      />
 
       {/* STICKY BOTTOM MOBILE CONVERSION BAR (Standard for High-Converting Ad Traffic) */}
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 bg-white border-t border-gray-200 px-4 py-2.5 shadow-2xl flex items-center justify-between gap-3">
@@ -610,9 +616,10 @@ export default function ProductDetails() {
 
         <button
           onClick={() => navigate(`/checkout/${product.id}`)}
-          className="bg-red-600 hover:bg-red-700 active:scale-95 text-white font-black px-6 py-2.5 rounded-xl text-xs sm:text-sm tracking-wide shadow-md flex items-center gap-1.5"
+          className="bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-700 hover:to-rose-700 active:scale-95 text-white font-black px-8 py-3.5 rounded-2xl text-sm sm:text-base tracking-wide shadow-xl shadow-red-500/30 ring-2 ring-red-200 flex items-center gap-2 cursor-pointer"
         >
-          Buy Now →
+          <Zap size={16} className="text-amber-300 fill-amber-300" />
+          <span>Buy Now →</span>
         </button>
       </div>
 

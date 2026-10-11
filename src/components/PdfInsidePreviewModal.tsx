@@ -111,9 +111,9 @@ export const PdfInsidePreviewModal: React.FC<PdfInsidePreviewModalProps> = ({
               </div>
               <button
                 onClick={handleBuyNow}
-                className="bg-red-600 hover:bg-red-700 text-white font-black px-4 py-1.5 rounded-xl text-xs shadow-md active:scale-95 transition-all flex items-center gap-1.5"
+                className="bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-700 hover:to-rose-700 text-white font-black px-5 py-2.5 rounded-xl text-xs sm:text-sm shadow-md shadow-red-500/25 ring-2 ring-red-200 active:scale-95 transition-all flex items-center gap-2 cursor-pointer"
               >
-                <ShoppingBag size={13} /> Buy Now
+                <ShoppingBag size={14} /> Buy Now
               </button>
             </div>
           </div>
@@ -208,9 +208,9 @@ export const PdfInsidePreviewModal: React.FC<PdfInsidePreviewModalProps> = ({
               </button>
               <button
                 onClick={handleBuyNow}
-                className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white font-black text-xs shadow-lg transition-all flex items-center justify-center gap-2"
+                className="flex-1 sm:flex-none px-7 py-3 rounded-xl bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-700 hover:to-rose-700 active:scale-95 text-white font-black text-xs sm:text-sm shadow-xl shadow-red-500/30 ring-2 ring-red-200 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                <ShoppingBag size={14} /> Buy This PDF (₹{product.price})
+                <ShoppingBag size={16} /> Buy This PDF (₹{product.price})
               </button>
             </div>
           </div>

@@ -7,15 +7,22 @@ import {
   Headphones, 
   Gift, 
   Tag, 
-  ArrowRight, 
-  Sparkles,
+  ArrowRight,
   BookOpen,
   Clock,
   Flame,
   Layers,
   MessageCircle,
   X,
-  CheckCircle2
+  CheckCircle2,
+  Palette,
+  Edit3,
+  Sparkles,
+  Zap,
+  Plus,
+  Check,
+  Link2,
+  Copy
 } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
@@ -23,11 +30,13 @@ import { ProductCard } from '../components/ProductCard';
 import { Carousel } from '../components/Carousel';
 import { PdfInsidePreviewModal } from '../components/PdfInsidePreviewModal';
 import { useProducts } from '../context/ProductContext';
+import { useAuth } from '../context/AuthContext';
 import { Product } from '../types';
 
 export default function Home() {
   const navigate = useNavigate();
-  const { products, bundles, categories } = useProducts();
+  const { products, bundles, categories, heroConfig } = useProducts();
+  const { isAdmin } = useAuth();
   const [newsletterEmail, setNewsletterEmail] = useState('');
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
   const [previewModalProduct, setPreviewModalProduct] = useState<Product | null>(null);
@@ -112,11 +121,39 @@ export default function Home() {
       <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 lg:px-6 py-4 space-y-8">
         {/* HERO BANNER */}
         <section className="relative overflow-hidden rounded-2xl md:rounded-3xl bg-gradient-to-r from-[#0B1528] via-[#0F1E3D] to-[#1E3A8A] text-white p-5 sm:p-8 lg:p-10 shadow-xl border border-blue-950/40">
+          {/* Custom Background Photo from Admin if uploaded */}
+          {heroConfig?.backgroundImage ? (
+            <div
+              className="absolute inset-0 bg-cover bg-center transition-all duration-700 pointer-events-none"
+              style={{ backgroundImage: `url(${heroConfig.backgroundImage})` }}
+            />
+          ) : null}
+
+          {/* Dark overlay for contrast and readability */}
+          {heroConfig?.backgroundImage ? (
+            <div
+              className="absolute inset-0 bg-[#0B1528] transition-opacity duration-300 pointer-events-none"
+              style={{ opacity: heroConfig.backgroundOverlayOpacity ?? 0.55 }}
+            />
+          ) : null}
+
           {/* Subtle star particles background */}
           <div className="absolute inset-0 bg-[radial-gradient(#38bdf8_1px,transparent_1px)] [background-size:24px_24px] opacity-15 pointer-events-none" />
 
+          {/* Admin shortcut button when admin is logged in */}
+          {isAdmin && (
+            <Link
+              to="/admin?tab=hero"
+              className="absolute top-4 left-4 z-20 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-black/50 hover:bg-black/75 backdrop-blur-md border border-white/25 text-white text-[11px] font-bold shadow-md hover:scale-105 transition-all"
+              title="Admin Panel: Change Background Photo & Overlapping PDFs"
+            >
+              <Palette size={13} className="text-yellow-400" />
+              <span>Edit Hero &amp; PDFs</span>
+            </Link>
+          )}
+
           {/* Special Offer Pill Badge (Top Right) */}
-          <div className="absolute top-4 right-4 md:top-6 md:right-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl p-2.5 md:p-3.5 text-center shadow-lg border border-white/20 transform rotate-1">
+          <div className="absolute top-4 right-4 md:top-6 md:right-8 bg-gradient-to-br from-orange-500 to-red-600 rounded-xl p-2.5 md:p-3.5 text-center shadow-lg border border-white/20 transform rotate-1 z-10">
             <div className="text-[10px] md:text-xs font-bold uppercase tracking-wider text-orange-100">
               Special Offer
             </div>
@@ -131,10 +168,6 @@ export default function Home() {
           <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8 pt-4 md:pt-0">
             {/* Left Content */}
             <div className="max-w-xl text-left space-y-4">
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md text-orange-400 text-xs font-semibold border border-white/10">
-                <Sparkles size={14} /> 2026 Latest Editions &amp; Exam Notes
-              </div>
-
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-black tracking-tight leading-[1.15]">
                 Learn More. Do More.<br />
                 <span className="text-[#FBBF24]">Grow Faster.</span>
@@ -160,44 +193,68 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Right Graphic: 3D Stack of Books matching the mockup */}
+            {/* Right Graphic: 3D Stack of Books matching the mockup with customizable photos & links */}
             <div className="relative flex items-center justify-center pt-4 lg:pt-0 pb-2">
               <div className="relative flex items-center">
-                {/* Book 1 */}
-                <div className="w-24 sm:w-28 md:w-32 transform -rotate-12 hover:-rotate-6 transition-all duration-300 shadow-2xl rounded-lg overflow-hidden border border-white/20">
-                  <img
-                    src={products[0]?.coverImage}
-                    alt="Book 1"
-                    className="w-full aspect-[3/4] object-cover"
-                  />
-                </div>
-                {/* Book 2 */}
-                <div className="w-24 sm:w-28 md:w-32 -ml-8 sm:-ml-10 transform -rotate-3 hover:rotate-0 transition-all duration-300 shadow-2xl rounded-lg overflow-hidden border border-white/20 z-10">
-                  <img
-                    src={products[1]?.coverImage}
-                    alt="Book 2"
-                    className="w-full aspect-[3/4] object-cover"
-                  />
-                </div>
-                {/* Book 3 */}
-                <div className="w-24 sm:w-28 md:w-32 -ml-8 sm:-ml-10 transform rotate-6 hover:rotate-2 transition-all duration-300 shadow-2xl rounded-lg overflow-hidden border border-white/20 z-20">
-                  <img
-                    src={products[2]?.coverImage}
-                    alt="Book 3"
-                    className="w-full aspect-[3/4] object-cover"
-                  />
-                </div>
-                {/* Book 4 */}
-                <div className="w-24 sm:w-28 md:w-32 -ml-8 sm:-ml-10 transform rotate-14 hover:rotate-10 transition-all duration-300 shadow-2xl rounded-lg overflow-hidden border border-white/20 z-30">
-                  <img
-                    src={products[3]?.coverImage}
-                    alt="Book 4"
-                    className="w-full aspect-[3/4] object-cover"
-                  />
-                </div>
+                {(heroConfig?.stackedCards && heroConfig.stackedCards.length > 0
+                  ? heroConfig.stackedCards
+                  : [
+                      { id: 'card-1', title: products[0]?.title || 'PDF 1', image: products[0]?.coverImage || '', link: `/product/${products[0]?.id || ''}` },
+                      { id: 'card-2', title: products[1]?.title || 'PDF 2', image: products[1]?.coverImage || '', link: `/product/${products[1]?.id || ''}` },
+                      { id: 'card-3', title: products[2]?.title || 'PDF 3', image: products[2]?.coverImage || '', link: `/product/${products[2]?.id || ''}` },
+                      { id: 'card-4', title: products[3]?.title || 'PDF 4', image: products[3]?.coverImage || '', link: `/product/${products[3]?.id || ''}` }
+                    ]
+                ).map((card, idx) => {
+                  const rotationStyles = [
+                    'transform -rotate-12 hover:-rotate-6 z-10',
+                    '-ml-8 sm:-ml-10 transform -rotate-3 hover:rotate-0 z-20',
+                    '-ml-8 sm:-ml-10 transform rotate-6 hover:rotate-2 z-30',
+                    '-ml-8 sm:-ml-10 transform rotate-14 hover:rotate-10 z-40'
+                  ];
+                  const currentRotation = rotationStyles[idx % rotationStyles.length];
+                  const cardCover = card.image || products[idx]?.coverImage || '';
+                  const cardLink = card.link || (products[idx] ? `/product/${products[idx].id}` : '');
+                  const isExternal = cardLink.startsWith('http://') || cardLink.startsWith('https://');
+
+                  const cardContent = (
+                    <div
+                      className={`w-24 sm:w-28 md:w-32 shadow-2xl rounded-lg overflow-hidden border border-white/20 transition-all duration-300 hover:scale-105 hover:-translate-y-2 group cursor-pointer ${currentRotation}`}
+                      title={card.title ? `${card.title} (Click to open)` : 'Click to view PDF'}
+                    >
+                      <img
+                        src={cardCover}
+                        alt={card.title || `Book ${idx + 1}`}
+                        className="w-full aspect-[3/4] object-cover group-hover:brightness-105 transition-all"
+                      />
+                    </div>
+                  );
+
+                  if (cardLink) {
+                    if (isExternal) {
+                      return (
+                        <a
+                          key={card.id || idx}
+                          href={cardLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                        >
+                          {cardContent}
+                        </a>
+                      );
+                    }
+                    return (
+                      <Link key={card.id || idx} to={cardLink} className="block">
+                        {cardContent}
+                      </Link>
+                    );
+                  }
+
+                  return <div key={card.id || idx}>{cardContent}</div>;
+                })}
 
                 {/* PDF Stamp icon */}
-                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 z-40 bg-white rounded-xl shadow-xl px-3 py-1 border border-red-200 flex items-center gap-1.5 animate-bounce">
+                <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 z-50 bg-white rounded-xl shadow-xl px-3 py-1 border border-red-200 flex items-center gap-1.5 animate-bounce pointer-events-none">
                   <div className="w-5 h-5 bg-red-600 rounded flex items-center justify-center text-white text-[10px] font-black">
                     PDF
                   </div>
@@ -275,71 +332,212 @@ export default function Home() {
 
         {/* MEGA BUNDLES & COMBO PACKS (HIGH-CONVERSION FEATURE) */}
         {bundles && bundles.length > 0 && (
-          <section className="bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-red-500/10 rounded-3xl p-5 sm:p-8 border-2 border-orange-300 shadow-sm space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <section className="bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-red-500/10 rounded-3xl p-5 sm:p-8 border-2 border-orange-300 shadow-sm space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div>
-                <div className="inline-flex items-center gap-1 text-[11px] bg-red-600 text-white font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider mb-1">
-                  <Flame size={12} className="fill-white" /> High Value Combos
+                <div className="inline-flex items-center gap-1 text-[11px] bg-red-600 text-white font-black px-3 py-1 rounded-full uppercase tracking-wider mb-1.5 shadow-xs">
+                  <Flame size={13} className="fill-white" /> High Value Mega Combos • Super Savings
                 </div>
-                <h2 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-                  <Layers className="text-orange-600" size={24} /> Mega PDF Bundles &amp; Packs
+                <h2 className="text-xl sm:text-3xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                  <Layers className="text-orange-600" size={26} /> Mega PDF Combos &amp; Pack Deals
                 </h2>
-                <p className="text-xs text-gray-600">
-                  Buy 3 to 4 guides together in an all-in-one pack and save up to 70%!
+                <p className="text-xs sm:text-sm text-gray-600 mt-0.5">
+                  Ek saath 3 se 4 complete guides khareedein aur 70% se zyada ki bachat karein! Neeche har combo mein shaamil saari kitabein dekh sakte hain.
                 </p>
               </div>
+
+              {isAdmin && (
+                <button
+                  onClick={() => navigate('/admin?tab=bundles')}
+                  className="self-start sm:self-auto bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
+                >
+                  <Plus size={14} /> Admin: Manage Combos
+                </button>
+              )}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {bundles.map((bundle) => {
-                const discount = Math.round(((bundle.oldPrice - bundle.price) / bundle.oldPrice) * 100);
+                // Resolve all included products with their real cover photos and prices
+                const included = (bundle.productIds || [])
+                  .map((pId) => products.find((p) => p.id === pId))
+                  .filter(Boolean) as Product[];
+
+                // If ids could not be resolved, fallback to top products
+                const displayItems = included.length > 0 ? included : products.slice(0, 4);
+
+                const totalCalculatedValue = displayItems.reduce((acc, p) => acc + (p.price || 99), 0);
+                const originalValue = Math.max(bundle.oldPrice || 0, totalCalculatedValue);
+                const discount = Math.round(((originalValue - bundle.price) / originalValue) * 100);
+                const savings = originalValue - bundle.price;
 
                 return (
                   <div
                     key={bundle.id}
-                    className="bg-white rounded-2xl p-4 sm:p-5 border border-orange-200 shadow-sm hover:shadow-lg transition-all flex flex-col justify-between"
+                    className="bg-white rounded-3xl p-5 sm:p-7 border-2 border-orange-200/90 shadow-md hover:shadow-2xl transition-all duration-300 flex flex-col justify-between relative overflow-hidden group"
                   >
-                    <div className="flex gap-4">
-                      <img
-                        src={bundle.coverImage || products[0]?.coverImage}
-                        alt=""
-                        className="w-20 h-28 object-cover rounded-xl border border-gray-200 shadow-xs shrink-0"
-                      />
-                      <div className="flex-1">
+                    {/* Top gradient stripe */}
+                    <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-amber-500 to-orange-500" />
+
+                    <div>
+                      {/* Badge and Pill header */}
+                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
                         <div className="flex items-center gap-2">
-                          <span className="bg-red-600 text-white text-[10px] font-black px-2 py-0.5 rounded">
-                            {bundle.badge || `${discount}% OFF`}
+                          <span className="bg-gradient-to-r from-red-600 to-orange-600 text-white text-[10px] sm:text-[11px] font-black px-3 py-1 rounded-full uppercase tracking-wider shadow-xs flex items-center gap-1">
+                            <Flame size={12} className="fill-white" />
+                            {bundle.badge || 'MEGA COMBO'}
                           </span>
-                          <span className="text-[11px] font-bold text-gray-500">
-                            {bundle.productIds?.length || 4} PDFs Included
+                          <span className="text-[11px] font-extrabold text-orange-900 bg-orange-100/90 px-2.5 py-0.5 rounded-full">
+                            📚 {displayItems.length} Complete PDFs in 1 Deal
                           </span>
                         </div>
-                        <h3 className="font-bold text-sm sm:text-base text-gray-900 mt-1 line-clamp-1">
-                          {bundle.title}
-                        </h3>
-                        <p className="text-xs text-gray-500 line-clamp-2 mt-1">
-                          {bundle.subtitle}
-                        </p>
-                        <div className="flex items-baseline gap-2.5 mt-3">
-                          <span className="text-xl font-black text-red-600">
-                            ₹{bundle.price}
+
+                        <span className="bg-emerald-100 text-emerald-800 text-xs font-black px-2.5 py-1 rounded-full border border-emerald-300">
+                          Save ₹{savings} ({discount}% OFF)
+                        </span>
+                      </div>
+
+                      {/* Title and subtitle */}
+                      <h3 className="text-lg sm:text-2xl font-black text-gray-900 tracking-tight leading-tight mt-1">
+                        {bundle.title}
+                      </h3>
+                      <p className="text-xs sm:text-sm text-gray-600 mt-1 line-clamp-2 leading-relaxed">
+                        {bundle.subtitle || bundle.description}
+                      </p>
+
+                      {/* PHOTO SHOWCASE OF ALL INCLUDED PDF BOOKS */}
+                      <div className="bg-gradient-to-br from-amber-50/80 via-orange-50/40 to-yellow-50/40 rounded-2xl p-4 sm:p-5 border border-orange-200/90 my-4 shadow-xs">
+                        <div className="flex items-center justify-between pb-3 border-b border-orange-200/60 mb-3.5">
+                          <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-gray-900">
+                            <Sparkles size={16} className="text-orange-500 fill-orange-500" />
+                            <span>Yeh {displayItems.length} Complete PDFs Is Combo Mein Included Hain:</span>
+                          </div>
+                          <span className="text-[10px] font-black text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">
+                            Sabhi Full Files ✓
                           </span>
-                          <span className="text-xs text-gray-400 line-through">
-                            ₹{bundle.oldPrice}
-                          </span>
-                          <span className="text-[10px] text-emerald-700 bg-emerald-100 font-extrabold px-1.5 py-0.5 rounded">
-                            Save ₹{bundle.oldPrice - bundle.price}
-                          </span>
+                        </div>
+
+                        {/* Visual grid showing all book cover photos side-by-side */}
+                        <div className={`grid gap-3 sm:gap-4 items-start ${
+                          displayItems.length <= 2 
+                            ? 'grid-cols-2 max-w-sm mx-auto' 
+                            : displayItems.length === 3 
+                              ? 'grid-cols-3' 
+                              : 'grid-cols-2 sm:grid-cols-4'
+                        }`}>
+                          {displayItems.map((p, idx) => (
+                            <div
+                              key={p.id}
+                              onClick={() => setPreviewModalProduct(p)}
+                              className="flex flex-col items-center text-center group/book cursor-pointer"
+                              title={`${p.title} (Click to preview sample pages)`}
+                            >
+                              <div className="relative w-full aspect-[3/4] rounded-xl overflow-hidden shadow-md group-hover/book:shadow-xl group-hover/book:-translate-y-1.5 transition-all duration-300 border-2 border-white bg-white ring-1 ring-gray-200">
+                                <img
+                                  src={p.coverImage}
+                                  alt={p.title}
+                                  className="w-full h-full object-cover group-hover/book:scale-105 transition-transform"
+                                />
+
+                                {/* Book position index tag */}
+                                <span className="absolute top-1.5 left-1.5 bg-black/85 backdrop-blur-xs text-white text-[9px] font-black px-1.5 py-0.5 rounded shadow">
+                                  #{idx + 1}
+                                </span>
+
+                                {/* Hover preview pill */}
+                                <div className="absolute inset-0 bg-black/35 opacity-0 group-hover/book:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-bold gap-1 p-1">
+                                  <BookOpen size={12} /> Preview
+                                </div>
+
+                                {/* Complete check badge */}
+                                <div className="absolute bottom-1 right-1 bg-emerald-600 text-white text-[8px] font-extrabold px-1.5 py-0.5 rounded shadow flex items-center gap-0.5">
+                                  <Check size={8} className="stroke-[3]" /> PDF
+                                </div>
+                              </div>
+
+                              <h4 className="text-xs font-black text-gray-900 line-clamp-2 mt-2 leading-tight group-hover/book:text-orange-600 transition-colors">
+                                {p.title}
+                              </h4>
+                              <div className="flex items-center gap-1.5 mt-1">
+                                <span className="text-[10px] text-gray-400 font-bold line-through">
+                                  ₹{p.price}
+                                </span>
+                                <span className="text-[10px] text-emerald-700 font-extrabold bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                  Included ✓
+                                </span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Price & Value Comparison Box */}
+                      <div className="bg-gradient-to-r from-gray-50 via-orange-50/30 to-amber-50/40 rounded-2xl p-4 border border-orange-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                        <div>
+                          <div className="flex items-baseline gap-2.5">
+                            <span className="text-2xl sm:text-3xl font-black text-red-600">
+                              ₹{bundle.price}
+                            </span>
+                            <span className="text-sm sm:text-base text-gray-400 font-bold line-through">
+                              ₹{originalValue}
+                            </span>
+                            <span className="bg-emerald-600 text-white text-[11px] font-black px-2 py-0.5 rounded-md shadow-2xs">
+                              {discount}% OFF
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-gray-600 font-medium mt-1">
+                            Alag alag lene par keemat <span className="font-bold line-through">₹{originalValue}</span> • Combo mein sirf <span className="font-black text-red-600">₹{bundle.price}</span> (Bachat: ₹{savings})
+                          </p>
+                        </div>
+
+                        <div className="text-left sm:text-right shrink-0">
+                          <div className="text-xs font-black text-emerald-700 flex items-center sm:justify-end gap-1">
+                            <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
+                            <span>Instant Digital Download</span>
+                          </div>
+                          <p className="text-[10px] text-gray-500 mt-0.5">
+                            Payment ke turant baad saare {displayItems.length} PDFs unlock
+                          </p>
                         </div>
                       </div>
                     </div>
 
-                    <button
-                      onClick={() => navigate(`/checkout/${bundle.id}`)}
-                      className="mt-4 w-full bg-gradient-to-r from-red-600 to-orange-600 hover:from-red-700 hover:to-orange-700 text-white font-extrabold py-2.5 rounded-xl text-xs sm:text-sm tracking-wide shadow-md transition-all flex items-center justify-center gap-1.5"
-                    >
-                      Get Complete Bundle (₹{bundle.price}) <ArrowRight size={15} />
-                    </button>
+                    {/* Action button */}
+                    <div className="pt-4 space-y-2">
+                      <button
+                        onClick={() => navigate(`/checkout/${bundle.id}`)}
+                        className="w-full bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-700 hover:to-rose-700 active:scale-[0.98] text-white font-black py-4 px-6 rounded-2xl text-base sm:text-lg tracking-wide shadow-xl shadow-red-500/30 ring-4 ring-red-100 hover:ring-red-200 transition-all flex items-center justify-center gap-2 cursor-pointer group"
+                      >
+                        <Zap size={20} className="text-amber-300 fill-amber-300 group-hover:scale-110 transition-transform" />
+                        <span>GET ALL {displayItems.length} PDFs FOR ₹{bundle.price}</span>
+                        <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
+                      </button>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const url = `${window.location.origin}/checkout/${bundle.id}`;
+                            navigator.clipboard.writeText(url);
+                            alert(`✓ Combo Direct Checkout Link copied for Ads:\n${url}`);
+                          }}
+                          className="text-[11px] font-bold text-gray-600 hover:text-emerald-700 flex items-center gap-1 hover:underline transition-colors"
+                          title="Copy Link for Meta Ads"
+                        >
+                          <Link2 size={13} className="text-emerald-600" />
+                          <span>Copy Ad Link (Meta / Facebook Ads)</span>
+                        </button>
+
+                        {isAdmin && (
+                          <button
+                            onClick={() => navigate('/admin?tab=bundles')}
+                            className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 hover:underline"
+                          >
+                            <Edit3 size={12} /> Edit Combo in Admin →
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 );
               })}
@@ -534,20 +732,6 @@ export default function Home() {
           </button>
         </div>
       )}
-
-      {/* FLOATING WHATSAPP CHAT BUTTON (INSTANT SALES ASSISTANCE) */}
-      <a
-        href="https://wa.me/919876543210?text=Hi%20PDF%20Master%20India,%20I%20have%20a%20question%20about%20ordering%20a%20PDF"
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Chat on WhatsApp"
-        className="fixed bottom-5 right-5 z-40 bg-emerald-500 hover:bg-emerald-600 text-white p-3.5 rounded-full shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all group"
-      >
-        <MessageCircle size={24} className="fill-white" />
-        <span className="max-w-0 overflow-hidden whitespace-nowrap group-hover:max-w-xs transition-all duration-300 ease-in-out text-xs font-bold pl-0 group-hover:pl-2">
-          Chat on WhatsApp
-        </span>
-      </a>
 
       <Footer />
     </div>

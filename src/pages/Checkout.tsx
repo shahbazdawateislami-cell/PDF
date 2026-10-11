@@ -10,7 +10,8 @@ import {
   Sparkles,
   AlertCircle,
   Tag,
-  Check
+  Check,
+  MessageCircle
 } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
@@ -34,9 +35,9 @@ export default function Checkout() {
   const oldPrice = checkoutItem?.oldPrice || 199;
   const isBundle = !!bundleItem;
 
-  const [customerName, setCustomerName] = useState(user?.displayName || 'Aarav Sharma');
-  const [customerEmail, setCustomerEmail] = useState(user?.email || 'customer@gmail.com');
-  const [customerPhone, setCustomerPhone] = useState('+91 98765 43210');
+  const [customerName, setCustomerName] = useState(user?.displayName || 'Customer');
+  const [customerEmail, setCustomerEmail] = useState(user?.email || 'customer@pdfmaster.in');
+  const [customerPhone, setCustomerPhone] = useState(user?.phoneNumber || '');
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -176,89 +177,106 @@ export default function Checkout() {
         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 items-start">
           {/* Left: Customer Info Form */}
           <div className="md:col-span-7 bg-white rounded-3xl p-6 sm:p-8 border border-gray-200/80 shadow-xs space-y-6">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between pb-2 border-b border-gray-100">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-bold text-sm">
-                  1
+                <div className="w-8 h-8 rounded-full bg-red-100 text-red-600 flex items-center justify-center font-black text-sm">
+                  ⚡
                 </div>
-                <h2 className="text-lg font-black text-gray-900">
-                  Customer &amp; Delivery Details
-                </h2>
+                <div>
+                  <h2 className="text-lg font-black text-gray-900">
+                    Express 1-Click Checkout
+                  </h2>
+                  <p className="text-[11px] text-gray-500">
+                    فوری اور آسان خریداری • No complicated forms required
+                  </p>
+                </div>
               </div>
-              <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-1">
-                <ShieldCheck size={14} /> 256-Bit SSL Encrypted
+              <span className="text-[11px] text-emerald-600 font-bold flex items-center gap-1 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200">
+                <ShieldCheck size={14} /> 100% Safe &amp; Verified
               </span>
             </div>
 
-            <form onSubmit={handlePay} className="space-y-4 text-xs">
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Full Name</label>
-                <input
-                  type="text"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  required
-                  placeholder="Your Full Name"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-xs outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600"
-                />
-              </div>
+            <form onSubmit={handlePay} className="space-y-5 text-xs">
+              {/* Optional Quick Info (Simple & Fast) */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1 text-[11px]">
+                    Your Name (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="Enter your name"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 bg-gray-50/50 text-xs outline-none focus:border-red-600 focus:bg-white focus:ring-2 focus:ring-red-100 transition-all"
+                  />
+                </div>
 
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">Email Address (for Instant Delivery)</label>
-                <input
-                  type="email"
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  required
-                  placeholder="yourname@gmail.com"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-xs outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600"
-                />
-                <p className="text-[10px] text-gray-400 mt-1">
-                  Download link will unlock on screen immediately and also save to your purchases.
-                </p>
-              </div>
-
-              <div>
-                <label className="block font-bold text-gray-700 mb-1">WhatsApp / Phone Number</label>
-                <input
-                  type="tel"
-                  value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
-                  required
-                  placeholder="+91 98765 43210"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-xs outline-none focus:border-red-600 focus:ring-1 focus:ring-red-600"
-                />
+                <div>
+                  <label className="block font-bold text-gray-700 mb-1 text-[11px] flex items-center justify-between">
+                    <span>Phone / WhatsApp (Optional)</span>
+                    <span className="text-[10px] text-emerald-600 font-semibold">For WhatsApp PDF Link</span>
+                  </label>
+                  <input
+                    type="tel"
+                    value={customerPhone}
+                    onChange={(e) => setCustomerPhone(e.target.value)}
+                    placeholder="e.g. 7079988808"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 bg-gray-50/50 text-xs outline-none focus:border-red-600 focus:bg-white focus:ring-2 focus:ring-red-100 transition-all"
+                  />
+                </div>
               </div>
 
               {/* Supported Indian payment methods chips */}
-              <div className="p-3 bg-gray-50 rounded-2xl border border-gray-100 space-y-2 text-[11px]">
-                <div className="font-bold text-gray-700 flex items-center justify-between">
-                  <span>Accepted Payment Methods:</span>
-                  <span className="text-emerald-700 font-extrabold">Instant UPI Unlocked</span>
+              <div className="p-3.5 bg-gradient-to-r from-orange-50/80 to-amber-50/60 rounded-2xl border border-orange-200/80 space-y-2">
+                <div className="font-extrabold text-gray-800 flex items-center justify-between text-xs">
+                  <span className="flex items-center gap-1.5">
+                    <CreditCard size={14} className="text-orange-600" /> All Payment Methods Supported:
+                  </span>
+                  <span className="text-emerald-700 font-black text-[11px] bg-emerald-100/80 px-2 py-0.5 rounded-md">
+                    Instant UPI Enabled
+                  </span>
                 </div>
-                <div className="flex flex-wrap gap-2 text-gray-600">
-                  <span className="bg-white border px-2 py-1 rounded-md font-bold text-[10px]">GPay</span>
-                  <span className="bg-white border px-2 py-1 rounded-md font-bold text-[10px]">PhonePe</span>
-                  <span className="bg-white border px-2 py-1 rounded-md font-bold text-[10px]">Paytm</span>
-                  <span className="bg-white border px-2 py-1 rounded-md font-bold text-[10px]">BHIM UPI</span>
-                  <span className="bg-white border px-2 py-1 rounded-md font-bold text-[10px]">Cards</span>
-                  <span className="bg-white border px-2 py-1 rounded-md font-bold text-[10px]">NetBanking</span>
+                <div className="flex flex-wrap gap-1.5 text-gray-700">
+                  <span className="bg-white border border-orange-200 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-2xs">Google Pay</span>
+                  <span className="bg-white border border-orange-200 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-2xs">PhonePe</span>
+                  <span className="bg-white border border-orange-200 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-2xs">Paytm</span>
+                  <span className="bg-white border border-orange-200 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-2xs">BHIM UPI</span>
+                  <span className="bg-white border border-orange-200 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-2xs">Debit / Credit Card</span>
+                  <span className="bg-white border border-orange-200 px-2.5 py-1 rounded-lg font-bold text-[11px] shadow-2xs">Net Banking</span>
                 </div>
               </div>
 
               {errorMessage && (
-                <div className="p-3 rounded-xl bg-red-50 text-red-700 text-xs flex items-center gap-2">
-                  <AlertCircle size={16} /> {errorMessage}
+                <div className="p-3.5 rounded-xl bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                  <AlertCircle size={16} className="shrink-0" /> {errorMessage}
                 </div>
               )}
 
-              <button
-                type="submit"
-                disabled={isProcessing}
-                className="w-full bg-red-600 hover:bg-red-700 active:scale-[0.99] text-white font-black py-3.5 rounded-xl text-sm tracking-wide shadow-lg hover:shadow-red-500/20 transition-all flex items-center justify-center gap-2"
-              >
-                {isProcessing ? 'Verifying with Razorpay...' : `Pay ₹${finalPrice} & Download PDF`}
-              </button>
+              {/* BIG, HIGHLIGHTED, HIGH-CONVERSION PURCHASE BUTTON */}
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  disabled={isProcessing}
+                  className="w-full bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-700 hover:to-rose-700 active:scale-[0.98] text-white font-black py-4.5 sm:py-5 px-6 rounded-2xl text-base sm:text-lg tracking-wide shadow-xl shadow-red-500/30 ring-4 ring-red-100 hover:ring-red-200 transition-all flex flex-col items-center justify-center gap-1 cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <Lock size={18} className="text-amber-300" />
+                    <span>
+                      {isProcessing ? 'Connecting to Razorpay...' : `PAY ₹${finalPrice} & INSTANT DOWNLOAD`}
+                    </span>
+                    <Sparkles size={18} className="text-amber-300 group-hover:rotate-12 transition-transform" />
+                  </div>
+                  <span className="text-[11px] font-bold text-red-100 tracking-normal">
+                    ⚡ ایک کلک پر فوری ڈاؤن لوڈ • Instant PDF Unlock after Payment
+                  </span>
+                </button>
+
+                <p className="text-center text-[11px] text-gray-500 font-medium mt-3 flex items-center justify-center gap-1.5">
+                  <ShieldCheck size={14} className="text-emerald-600" />
+                  No sign-up or lengthy forms needed • 100% money safe Razorpay gateway
+                </p>
+              </div>
             </form>
           </div>
 
@@ -294,6 +312,37 @@ export default function Checkout() {
                 </div>
               </div>
             </div>
+
+            {/* If Bundle, show all included book covers */}
+            {isBundle && bundleItem && (
+              <div className="mt-2.5 pt-2.5 border-t border-gray-100">
+                <div className="text-[11px] font-bold text-gray-700 mb-1.5 flex items-center justify-between">
+                  <span>Is Combo Mein Shaamil Kitabein ({bundleItem.productIds?.length || 4} PDFs):</span>
+                  <span className="text-[10px] text-emerald-700 font-black bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                    Sabhi Ka Access ✓
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  {(bundleItem.productIds || []).map((pId, idx) => {
+                    const prod = products.find((p) => p.id === pId);
+                    if (!prod) return null;
+                    return (
+                      <div key={prod.id} className="shrink-0 flex flex-col items-center w-12 text-center" title={prod.title}>
+                        <div className="w-12 h-16 rounded-md overflow-hidden border border-gray-200 shadow-2xs relative bg-white">
+                          <img src={prod.coverImage} alt={prod.title} className="w-full h-full object-cover" />
+                          <span className="absolute top-0.5 left-0.5 bg-black/80 text-white text-[7px] font-black px-1 rounded">
+                            #{idx + 1}
+                          </span>
+                        </div>
+                        <span className="text-[8px] text-gray-700 font-bold truncate w-full mt-0.5">
+                          {prod.title}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
 
             {/* Coupon Code Section */}
             <div className="pt-2 border-t border-gray-100">
@@ -348,15 +397,6 @@ export default function Checkout() {
                 <span>Total Amount:</span>
                 <span className="text-red-600">₹{finalPrice}</span>
               </div>
-            </div>
-
-            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100 text-emerald-800 text-[11px] space-y-1">
-              <div className="font-bold flex items-center gap-1">
-                <ShieldCheck size={14} /> 100% Risk Free Guarantee
-              </div>
-              <p className="text-[10px] text-emerald-700">
-                If you face any issues, our WhatsApp team will immediately assist or issue a 100% refund.
-              </p>
             </div>
           </div>
         </div>

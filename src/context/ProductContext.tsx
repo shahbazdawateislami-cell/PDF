@@ -1,8 +1,39 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Product, Order, DownloadLog, Bundle } from '../types';
+import { Product, Order, DownloadLog, Bundle, HeroBannerConfig, HeroStackedCard } from '../types';
 import { INITIAL_PRODUCTS, CATEGORIES_LIST, INITIAL_BUNDLES } from '../data/initialProducts';
 import { db } from '../firebase';
-import { collection, getDocs, setDoc, doc, deleteDoc } from 'firebase/firestore';
+import { collection, getDocs, setDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
+
+export const DEFAULT_HERO_CONFIG: HeroBannerConfig = {
+  backgroundImage: '',
+  backgroundOverlayOpacity: 0.55,
+  stackedCards: [
+    {
+      id: 'card-1',
+      title: 'ChatGPT & AI Tools Master Guide',
+      image: INITIAL_PRODUCTS[0]?.coverImage || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
+      link: `/product/${INITIAL_PRODUCTS[0]?.id || 'chatgpt-ai-tools-master-guide'}`
+    },
+    {
+      id: 'card-2',
+      title: 'Canva Pro Design Mastery',
+      image: INITIAL_PRODUCTS[1]?.coverImage || 'https://images.unsplash.com/photo-1626785774573-4b799315345d?w=600&auto=format&fit=crop&q=80',
+      link: `/product/${INITIAL_PRODUCTS[1]?.id || 'canva-design-mastery-guide'}`
+    },
+    {
+      id: 'card-3',
+      title: 'Instagram Reels Viral Growth',
+      image: INITIAL_PRODUCTS[2]?.coverImage || 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=600&auto=format&fit=crop&q=80',
+      link: `/product/${INITIAL_PRODUCTS[2]?.id || 'instagram-reels-viral-growth-playbook'}`
+    },
+    {
+      id: 'card-4',
+      title: 'Affiliate Marketing Zero to Hero',
+      image: INITIAL_PRODUCTS[3]?.coverImage || 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&auto=format&fit=crop&q=80',
+      link: `/product/${INITIAL_PRODUCTS[3]?.id || 'affiliate-marketing-zero-to-hero'}`
+    }
+  ]
+};
 
 interface ProductContextType {
   products: Product[];
@@ -12,6 +43,7 @@ interface ProductContextType {
   wishlist: string[];
   orders: Order[];
   downloadLogs: DownloadLog[];
+  heroConfig: HeroBannerConfig;
   addProduct: (product: Omit<Product, 'id'>) => Promise<string>;
   updateProduct: (id: string, updated: Partial<Product>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
@@ -28,6 +60,8 @@ interface ProductContextType {
   isWishlisted: (productId: string) => boolean;
   getCustomPdfFile: (productId: string) => string | null;
   saveCustomPdfFile: (productId: string, fileData: string, fileName: string) => void;
+  updateHeroConfig: (updated: Partial<HeroBannerConfig>) => Promise<void>;
+  resetHeroConfig: () => Promise<void>;
 }
 
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
@@ -39,6 +73,7 @@ const WISHLIST_STORAGE_KEY = 'pdf_master_wishlist';
 const ORDERS_STORAGE_KEY = 'pdf_master_orders';
 const LOGS_STORAGE_KEY = 'pdf_master_logs';
 const PDF_FILES_STORAGE_KEY = 'pdf_master_uploaded_files';
+const HERO_CONFIG_STORAGE_KEY = 'pdf_master_hero_banner_v2';
 
 export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [products, setProducts] = useState<Product[]>(() => {
@@ -88,6 +123,8 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
       const saved = localStorage.getItem(ORDERS_STORAGE_KEY);
       if (saved) return JSON.parse(saved);
     } catch {}
+    const now = Date.now();
+    const oneDay = 86400000;
     return [
       {
         id: 'ord_sample_9821',
@@ -99,9 +136,9 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         amount: 99,
         customerEmail: 'customer@gmail.com',
         customerName: 'Aarav Sharma',
-        customerPhone: '+91 98765 43210',
+        customerPhone: '+91 70799 88808',
         status: 'paid',
-        date: new Date(Date.now() - 3600000 * 2).toISOString(),
+        date: new Date(now - 3600000 * 2).toISOString(), // Today (2 hours ago)
         downloadCount: 1
       },
       {
@@ -116,8 +153,53 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         customerName: 'Shahbaz Dawateislami',
         customerPhone: '+91 98234 11223',
         status: 'paid',
-        date: new Date(Date.now() - 3600000 * 18).toISOString(),
+        date: new Date(now - 3600000 * 6).toISOString(), // Today (6 hours ago)
         downloadCount: 2
+      },
+      {
+        id: 'ord_sample_9823',
+        razorpayOrderId: 'order_Jx9Bp301E',
+        razorpayPaymentId: 'pay_Jx9Cp7711F',
+        productId: 'canva-design-mastery-guide',
+        productTitle: 'Canva Pro Design & Social Media Blueprint',
+        productCover: INITIAL_PRODUCTS[1]?.coverImage || '',
+        amount: 89,
+        customerEmail: 'priya.k@gmail.com',
+        customerName: 'Priya Kapoor',
+        customerPhone: '+91 97112 33445',
+        status: 'paid',
+        date: new Date(now - oneDay * 2).toISOString(), // This week (2 days ago)
+        downloadCount: 1
+      },
+      {
+        id: 'ord_sample_9824',
+        razorpayOrderId: 'order_Lx2Fk891G',
+        razorpayPaymentId: 'pay_Lx2Gk9922H',
+        productId: 'instagram-reels-viral-growth-playbook',
+        productTitle: 'Instagram Reels & Viral Growth Playbook',
+        productCover: INITIAL_PRODUCTS[2]?.coverImage || '',
+        amount: 99,
+        customerEmail: 'rohit.v@gmail.com',
+        customerName: 'Rohit Verma',
+        customerPhone: '+91 98101 22334',
+        status: 'paid',
+        date: new Date(now - oneDay * 4).toISOString(), // This week (4 days ago)
+        downloadCount: 1
+      },
+      {
+        id: 'ord_sample_9825',
+        razorpayOrderId: 'order_Mx5Qz441J',
+        razorpayPaymentId: 'pay_Mx5Rz5533K',
+        productId: 'affiliate-marketing-zero-to-hero',
+        productTitle: 'Affiliate Marketing & Passive Income Handbook',
+        productCover: INITIAL_PRODUCTS[3]?.coverImage || '',
+        amount: 129,
+        customerEmail: 'tanveer.a@gmail.com',
+        customerName: 'Tanveer Ahmed',
+        customerPhone: '+91 98991 44556',
+        status: 'paid',
+        date: new Date(now - oneDay * 12).toISOString(), // This month (12 days ago)
+        downloadCount: 1
       }
     ];
   });
@@ -137,6 +219,24 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         timestamp: new Date(Date.now() - 3600000 * 2).toISOString()
       }
     ];
+  });
+
+  const [heroConfig, setHeroConfig] = useState<HeroBannerConfig>(() => {
+    try {
+      const saved = localStorage.getItem(HERO_CONFIG_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && Array.isArray(parsed.stackedCards) && parsed.stackedCards.length > 0) {
+          return {
+            ...DEFAULT_HERO_CONFIG,
+            ...parsed
+          };
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse cached heroConfig', e);
+    }
+    return DEFAULT_HERO_CONFIG;
   });
 
   // Persistent storage effects
@@ -164,6 +264,14 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(downloadLogs));
   }, [downloadLogs]);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem(HERO_CONFIG_STORAGE_KEY, JSON.stringify(heroConfig));
+    } catch (e) {
+      console.warn('Could not save hero config to localStorage', e);
+    }
+  }, [heroConfig]);
+
   // Sync with Firestore in background if available
   useEffect(() => {
     async function syncFirestore() {
@@ -174,6 +282,14 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
           snap.forEach((d) => dbProducts.push(d.data() as Product));
           if (dbProducts.length > 0) {
             setProducts(dbProducts);
+          }
+        }
+
+        const heroDoc = await getDoc(doc(db, 'settings', 'hero_banner'));
+        if (heroDoc.exists()) {
+          const remoteHero = heroDoc.data() as HeroBannerConfig;
+          if (remoteHero && Array.isArray(remoteHero.stackedCards)) {
+            setHeroConfig((prev) => ({ ...prev, ...remoteHero }));
           }
         }
       } catch (err) {
@@ -312,6 +428,34 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const updateHeroConfig = async (updated: Partial<HeroBannerConfig>): Promise<void> => {
+    setHeroConfig((prev) => {
+      const next = { ...prev, ...updated };
+      try {
+        localStorage.setItem(HERO_CONFIG_STORAGE_KEY, JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+
+    try {
+      await setDoc(doc(db, 'settings', 'hero_banner'), updated, { merge: true });
+    } catch (e) {
+      console.warn('Firestore hero config update failed:', e);
+    }
+  };
+
+  const resetHeroConfig = async (): Promise<void> => {
+    setHeroConfig(DEFAULT_HERO_CONFIG);
+    try {
+      localStorage.setItem(HERO_CONFIG_STORAGE_KEY, JSON.stringify(DEFAULT_HERO_CONFIG));
+    } catch {}
+    try {
+      await setDoc(doc(db, 'settings', 'hero_banner'), DEFAULT_HERO_CONFIG);
+    } catch (e) {
+      console.warn('Firestore hero config reset failed:', e);
+    }
+  };
+
   return (
     <ProductContext.Provider
       value={{
@@ -322,6 +466,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         wishlist,
         orders,
         downloadLogs,
+        heroConfig,
         addProduct,
         updateProduct,
         deleteProduct,
@@ -337,7 +482,9 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         logDownload,
         isWishlisted,
         getCustomPdfFile,
-        saveCustomPdfFile
+        saveCustomPdfFile,
+        updateHeroConfig,
+        resetHeroConfig
       }}
     >
       {children}

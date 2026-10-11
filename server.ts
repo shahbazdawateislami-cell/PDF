@@ -2,6 +2,9 @@ import express from 'express';
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
 import { initializeApp, getApps } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 
@@ -205,7 +208,7 @@ app.get('/api/download/:orderId', async (req, res) => {
       `VERIFIED STATUS: PAID\n` +
       `DELIVERY TIMESTAMP: ${new Date().toISOString()}\n\n` +
       `Thank you for purchasing! This file is authorized for your personal study.\n` +
-      `Support: support@pdfmaster.in | WhatsApp: +91 98765 43210\n`
+      `Support: support@pdfmaster.in | WhatsApp: +91 70799 88808\n`
     );
   } catch (err) {
     res.status(500).json({ error: 'Failed to generate secure download stream' });
@@ -217,11 +220,24 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'healthy', project: 'PDF Master India', time: new Date().toISOString() });
 });
 
-if (require.main === module) {
-  const PORT = process.env.PORT || 3000;
-  app.listen(PORT, () => {
-    console.log(`PDF Master India server running on port ${PORT}`);
+// Serve frontend static files if dist folder exists (e.g. in Cloud Run production deployment)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distPath = path.resolve(__dirname, 'dist');
+
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get('*', (req, res, next) => {
+    if (req.path.startsWith('/api')) {
+      return next();
+    }
+    res.sendFile(path.join(distPath, 'index.html'));
   });
 }
+
+const PORT = Number(process.env.PORT) || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`PDF Master India server running on port ${PORT}`);
+});
 
 export default app;

@@ -103,9 +103,9 @@ export default function Cart() {
                     navigate(`/checkout/${cart[0].product.id}`);
                   }
                 }}
-                className="w-full bg-red-600 hover:bg-red-700 text-white font-black py-3 rounded-xl text-xs tracking-wide shadow-md transition-all flex items-center justify-center gap-1.5"
+                className="w-full bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-700 hover:to-rose-700 active:scale-[0.98] text-white font-black py-4 px-6 rounded-2xl text-sm sm:text-base tracking-wide shadow-xl shadow-red-500/25 ring-2 ring-red-100 transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
-                Proceed to Checkout <ArrowRight size={14} />
+                <span>Proceed to Instant Checkout</span> <ArrowRight size={16} />
               </button>
             </div>
           </div>

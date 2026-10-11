@@ -97,3 +97,16 @@ export interface Coupon {
   discountPercent: number;
   description: string;
 }
+
+export interface HeroStackedCard {
+  id: string;
+  title: string;
+  image: string;
+  link: string;
+}
+
+export interface HeroBannerConfig {
+  backgroundImage?: string;
+  backgroundOverlayOpacity?: number;
+  stackedCards: HeroStackedCard[];
+}

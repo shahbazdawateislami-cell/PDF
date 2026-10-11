@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Star, Heart, Eye } from 'lucide-react';
+import { Star, Heart, Eye, ShoppingBag, Zap } from 'lucide-react';
 import { Product } from '../types';
 import { useProducts } from '../context/ProductContext';
 
@@ -109,20 +109,21 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPreviewImag
         </div>
 
         {/* Action Buttons: Preview Pages & Buy Now */}
-        <div className="grid grid-cols-2 gap-1.5 pt-1">
+        <div className="grid grid-cols-12 gap-1.5 pt-1">
           <button
             onClick={handlePreview}
-            className="w-full bg-blue-50 hover:bg-blue-100 active:scale-[0.98] text-blue-700 py-2 rounded-xl font-bold text-[11px] transition-all flex items-center justify-center gap-1 border border-blue-200"
+            className="col-span-5 w-full bg-slate-100/80 hover:bg-slate-200/80 active:scale-[0.98] text-slate-700 py-2.5 rounded-xl font-bold text-[11px] transition-all flex items-center justify-center gap-1 border border-slate-200 cursor-pointer"
             title="Inspect inside pages before purchase"
           >
-            <Eye size={13} className="text-blue-600" />
+            <Eye size={12} className="text-slate-600" />
             Preview
           </button>
           <button
             onClick={handleBuyNow}
-            className="w-full bg-red-600 hover:bg-red-700 active:scale-[0.98] text-white py-2 rounded-xl font-black text-xs tracking-wide shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-1"
+            className="col-span-7 w-full bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-700 hover:to-rose-700 active:scale-[0.97] text-white py-2.5 px-2 rounded-xl font-black text-xs sm:text-[13px] tracking-wide shadow-md shadow-red-500/25 ring-2 ring-red-100 hover:ring-red-200 transition-all flex items-center justify-center gap-1 cursor-pointer group"
           >
-            Buy Now
+            <ShoppingBag size={13} className="shrink-0 group-hover:scale-110 transition-transform" />
+            <span>Buy Now</span>
           </button>
         </div>
       </div>

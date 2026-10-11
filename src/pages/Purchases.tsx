@@ -8,7 +8,8 @@ import {
   ShieldCheck, 
   Check, 
   Search,
-  X
+  X,
+  MessageCircle
 } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
@@ -150,6 +151,27 @@ export default function Purchases() {
             </Link>
           </div>
         )}
+
+        {/* WhatsApp Download Assistance Banner */}
+        <div className="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-3xl p-5 sm:p-6 border border-emerald-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 text-emerald-900 font-bold text-sm">
+              <MessageCircle size={18} className="fill-emerald-600 text-emerald-600" />
+              <span>Need Help with Download or Want PDF Directly on WhatsApp?</span>
+            </div>
+            <p className="text-xs text-gray-600 mt-1">
+              اگر پی ڈی ایف ڈاؤن لوڈ کرنے میں کوئی دقت ہو یا واٹس ایپ پر فائل چاہیے تو میسج کریں:
+            </p>
+          </div>
+          <a
+            href="https://wa.me/917079988808?text=Hi%20PDF%20Master%20India,%20I%20need%20help%20with%20my%20purchased%20PDF"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-4 py-2.5 rounded-xl flex items-center gap-2 shadow-2xs transition-colors shrink-0"
+          >
+            <span>💬 WhatsApp: +91 70799 88808</span>
+          </a>
+        </div>
       </main>
 
       {/* Online Reader Modal */}

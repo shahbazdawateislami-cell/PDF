@@ -8,7 +8,8 @@ import {
   ShieldCheck, 
   Check, 
   X,
-  Share2
+  Share2,
+  MessageCircle
 } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
@@ -48,7 +49,7 @@ export default function Success() {
         `TABLE OF CONTENTS:\n${product.tableOfContents.map(t => `${t.chapter}: ${t.title} (Pages: ${t.pages})`).join('\n')}\n\n` +
         `============================================================\n` +
         `Thank you for purchasing from PDF Master India!\n` +
-        `Support: support@pdfmaster.in | WhatsApp: +91 98765 43210\n`;
+        `Support: support@pdfmaster.in | WhatsApp: +91 70799 88808\n`;
 
       const blob = new Blob([content], { type: 'application/pdf;charset=utf-8' });
       const url = URL.createObjectURL(blob);
@@ -116,7 +117,7 @@ export default function Success() {
             <button
               onClick={handleDownload}
               disabled={downloading}
-              className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-black py-3.5 px-6 rounded-xl text-sm tracking-wide shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
+              className="w-full bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white font-black py-3.5 px-6 rounded-xl text-sm tracking-wide shadow-lg hover:shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <Download size={18} />
               {downloading ? 'Preparing Secure PDF...' : 'Download PDF Now'}
@@ -134,6 +135,17 @@ export default function Success() {
             >
               <BookOpen size={16} /> Read PDF Online
             </button>
+
+            {/* Direct WhatsApp Copy Assistance */}
+            <a
+              href={`https://wa.me/917079988808?text=Hi%20PDF%20Master%20India,%20I%20just%20completed%20Order%20${order?.id || '101'}%20for%20${encodeURIComponent(product.title)}.%20Please%20send%20my%20PDF%20copy%20here.`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold py-2.5 px-4 rounded-xl text-xs tracking-wide transition-all flex items-center justify-center gap-2 border border-emerald-200 shadow-2xs"
+            >
+              <MessageCircle size={15} className="text-emerald-600 fill-emerald-600" />
+              <span>Receive on WhatsApp (+91 70799 88808)</span>
+            </a>
 
             <Link
               to="/purchases"
