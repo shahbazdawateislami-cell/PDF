@@ -338,26 +338,9 @@ export default function Home() {
         {bundles && bundles.length > 0 && (
           <section className="bg-gradient-to-br from-amber-500/10 via-orange-500/5 to-red-500/10 rounded-3xl p-5 sm:p-8 border-2 border-orange-300 shadow-sm space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-              <div>
-                <div className="inline-flex items-center gap-1 text-[11px] bg-red-600 text-white font-black px-3 py-1 rounded-full uppercase tracking-wider mb-1.5 shadow-xs">
-                  <Flame size={13} className="fill-white" /> High Value Mega Combos • Super Savings
-                </div>
-                <h2 className="text-xl sm:text-3xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-                  <Layers className="text-orange-600" size={26} /> Mega PDF Combos &amp; Pack Deals
-                </h2>
-                <p className="text-xs sm:text-sm text-gray-600 mt-0.5">
-                  Ek saath 3 se 4 complete guides khareedein aur 70% se zyada ki bachat karein! Neeche har combo mein shaamil saari kitabein dekh sakte hain.
-                </p>
-              </div>
-
-              {isAdmin && (
-                <button
-                  onClick={() => navigate('/admin?tab=bundles')}
-                  className="self-start sm:self-auto bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-xs transition-colors shrink-0"
-                >
-                  <Plus size={14} /> Admin: Manage Combos
-                </button>
-              )}
+              <h2 className="text-xl sm:text-3xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+                <Layers className="text-orange-600" size={26} /> Mega PDF Combos &amp; Pack Deals
+              </h2>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -384,25 +367,8 @@ export default function Home() {
                     <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-red-600 via-amber-500 to-orange-500" />
 
                     <div>
-                      {/* Badge and Pill header */}
-                      <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className="bg-gradient-to-r from-red-600 to-orange-600 text-white text-[10px] sm:text-[11px] font-black px-3 py-1 rounded-full uppercase tracking-wider shadow-xs flex items-center gap-1">
-                            <Flame size={12} className="fill-white" />
-                            {bundle.badge || 'MEGA COMBO'}
-                          </span>
-                          <span className="text-[11px] font-extrabold text-orange-900 bg-orange-100/90 px-2.5 py-0.5 rounded-full">
-                            📚 {displayItems.length} Complete PDFs in 1 Deal
-                          </span>
-                        </div>
-
-                        <span className="bg-emerald-100 text-emerald-800 text-xs font-black px-2.5 py-1 rounded-full border border-emerald-300">
-                          Save ₹{savings} ({discount}% OFF)
-                        </span>
-                      </div>
-
                       {/* Title and subtitle */}
-                      <h3 className="text-lg sm:text-2xl font-black text-gray-900 tracking-tight leading-tight mt-1">
+                      <h3 className="text-lg sm:text-2xl font-black text-gray-900 tracking-tight leading-tight">
                         {bundle.title}
                       </h3>
                       <p className="text-xs sm:text-sm text-gray-600 mt-1 line-clamp-2 leading-relaxed">
@@ -411,16 +377,6 @@ export default function Home() {
 
                       {/* PHOTO SHOWCASE OF ALL INCLUDED PDF BOOKS */}
                       <div className="bg-gradient-to-br from-amber-50/80 via-orange-50/40 to-yellow-50/40 rounded-2xl p-4 sm:p-5 border border-orange-200/90 my-4 shadow-xs">
-                        <div className="flex items-center justify-between pb-3 border-b border-orange-200/60 mb-3.5">
-                          <div className="flex items-center gap-1.5 text-xs sm:text-sm font-black text-gray-900">
-                            <Sparkles size={16} className="text-orange-500 fill-orange-500" />
-                            <span>Yeh {displayItems.length} Complete PDFs Is Combo Mein Included Hain:</span>
-                          </div>
-                          <span className="text-[10px] font-black text-orange-700 bg-orange-100 px-2 py-0.5 rounded-full">
-                            Sabhi Full Files ✓
-                          </span>
-                        </div>
-
                         {/* Visual grid showing all book cover photos side-by-side */}
                         <div className={`grid gap-3 sm:gap-4 items-start ${
                           displayItems.length <= 2 
@@ -477,21 +433,16 @@ export default function Home() {
 
                       {/* Price & Value Comparison Box */}
                       <div className="bg-gradient-to-r from-gray-50 via-orange-50/30 to-amber-50/40 rounded-2xl p-4 border border-orange-200/80 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                        <div>
-                          <div className="flex items-baseline gap-2.5">
-                            <span className="text-2xl sm:text-3xl font-black text-red-600">
-                              ₹{bundle.price}
-                            </span>
-                            <span className="text-sm sm:text-base text-gray-400 font-bold line-through">
-                              ₹{originalValue}
-                            </span>
-                            <span className="bg-emerald-600 text-white text-[11px] font-black px-2 py-0.5 rounded-md shadow-2xs">
-                              {discount}% OFF
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-gray-600 font-medium mt-1">
-                            Alag alag lene par keemat <span className="font-bold line-through">₹{originalValue}</span> • Combo mein sirf <span className="font-black text-red-600">₹{bundle.price}</span> (Bachat: ₹{savings})
-                          </p>
+                        <div className="flex items-baseline gap-2.5">
+                          <span className="text-2xl sm:text-3xl font-black text-red-600">
+                            ₹{bundle.price}
+                          </span>
+                          <span className="text-sm sm:text-base text-gray-400 font-bold line-through">
+                            ₹{originalValue}
+                          </span>
+                          <span className="bg-emerald-600 text-white text-[11px] font-black px-2 py-0.5 rounded-md shadow-2xs">
+                            {discount}% OFF
+                          </span>
                         </div>
 
                         <div className="text-left sm:text-right shrink-0">
@@ -499,15 +450,12 @@ export default function Home() {
                             <CheckCircle2 size={14} className="text-emerald-600 shrink-0" />
                             <span>Instant Digital Download</span>
                           </div>
-                          <p className="text-[10px] text-gray-500 mt-0.5">
-                            Payment ke turant baad saare {displayItems.length} PDFs unlock
-                          </p>
                         </div>
                       </div>
                     </div>
 
                     {/* Action button */}
-                    <div className="pt-4 space-y-2">
+                    <div className="pt-4">
                       <button
                         onClick={() => navigate(`/checkout/${bundle.id}`)}
                         className="w-full bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-700 hover:to-rose-700 active:scale-[0.98] text-white font-black py-4 px-6 rounded-2xl text-base sm:text-lg tracking-wide shadow-xl shadow-red-500/30 ring-4 ring-red-100 hover:ring-red-200 transition-all flex items-center justify-center gap-2 cursor-pointer group"
@@ -516,31 +464,6 @@ export default function Home() {
                         <span>GET ALL {displayItems.length} PDFs FOR ₹{bundle.price}</span>
                         <ArrowRight size={18} className="group-hover:translate-x-1 transition-transform" />
                       </button>
-
-                      <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const url = `${window.location.origin}/checkout/${bundle.id}`;
-                            navigator.clipboard.writeText(url);
-                            alert(`✓ Combo Direct Checkout Link copied for Ads:\n${url}`);
-                          }}
-                          className="text-[11px] font-bold text-gray-600 hover:text-emerald-700 flex items-center gap-1 hover:underline transition-colors"
-                          title="Copy Link for Meta Ads"
-                        >
-                          <Link2 size={13} className="text-emerald-600" />
-                          <span>Copy Ad Link (Meta / Facebook Ads)</span>
-                        </button>
-
-                        {isAdmin && (
-                          <button
-                            onClick={() => navigate('/admin?tab=bundles')}
-                            className="text-[11px] font-bold text-blue-600 hover:text-blue-800 flex items-center gap-1 hover:underline"
-                          >
-                            <Edit3 size={12} /> Edit Combo in Admin →
-                          </button>
-                        )}
-                      </div>
                     </div>
                   </div>
                 );
@@ -584,19 +507,9 @@ export default function Home() {
         {/* ALL PDF PRODUCTS FULL SHOWCASE (2-by-2 GRID FORMAT ON MOBILE, RESPONSIVE ON DESKTOP) */}
         <section className="bg-white rounded-3xl p-4 sm:p-7 border border-gray-200/90 shadow-sm space-y-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-gray-100">
-            <div>
-              <div className="inline-flex items-center gap-1.5 text-[11px] bg-blue-100 text-blue-900 font-black px-2.5 py-0.5 rounded-full mb-1">
-                <span>📚 Complete Library</span>
-                <span>•</span>
-                <span>{products.length} Digital PDFs Available</span>
-              </div>
-              <h2 className="text-xl sm:text-3xl font-black text-gray-900 tracking-tight flex items-center gap-2">
-                <span>All PDF Books &amp; Study Guides</span>
-              </h2>
-              <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-                Website ki sabhi digital guides ek jagah — mobile par 2-by-2 format mein har kitab ko samne dekhein aur instant download karein.
-              </p>
-            </div>
+            <h2 className="text-xl sm:text-3xl font-black text-gray-900 tracking-tight flex items-center gap-2">
+              <span>All PDF Books &amp; Study Guides</span>
+            </h2>
 
             <Link
               to="/all"
