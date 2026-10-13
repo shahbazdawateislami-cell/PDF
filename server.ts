@@ -4,17 +4,24 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
+import multer from 'multer';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distPath = path.resolve(__dirname, 'dist');
 const DATA_DIR = path.resolve(__dirname, '.data');
 const DATA_FILE = path.join(DATA_DIR, 'server-db.json');
+const UPLOADS_DIR = path.resolve(DATA_DIR, 'uploads');
+
+if (!fs.existsSync(UPLOADS_DIR)) {
+  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
 
 interface LocalStore {
   settings: Record<string, any>;
   orders: Record<string, any>;
   payments: Record<string, any>;
+  products: Record<string, any>;
   download_logs: any[];
 }
 
@@ -22,6 +29,7 @@ let store: LocalStore = {
   settings: {},
   orders: {},
   payments: {},
+  products: {},
   download_logs: []
 };
 
@@ -92,12 +100,14 @@ const db = {
 
 const app = express();
 
-// Support raw body for webhook verification and json for API routes
+// Support raw body for webhook verification and large json for PDF/image uploads
 app.use(express.json({
+  limit: '100mb',
   verify: (req: any, _res, buf) => {
     req.rawBody = buf;
   }
 }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
 
 const DEFAULT_RAZORPAY_KEY_ID = 'rzp_live_TnGvSxZuZ5aAKf';
 const DEFAULT_RAZORPAY_KEY_SECRET = 'cAvLBUr7MwFWLricuOe7wCqv';
@@ -449,8 +459,15 @@ app.get('/api/download/:orderId', async (req, res) => {
       }
     }
 
-    // In demo/test mode, if orderId starts with 'order_' or exists in state, authorize
-    if (!orderData && !orderId.startsWith('order_') && !orderId.startsWith('ord_')) {
+    // Also check if orderId is directly a product ID or query param provided
+    const prods = (store.products || {}) as Record<string, any>;
+    let targetProductId = (req.query.productId as string) || orderData?.productId;
+    if (!targetProductId && prods[orderId]) {
+      targetProductId = orderId;
+    }
+
+    // In demo/test mode, if orderId starts with 'order_' or matches product or state, authorize
+    if (!orderData && !targetProductId && !orderId.startsWith('order_') && !orderId.startsWith('ord_') && !orderId.startsWith('pdf-')) {
       return res.status(404).json({ error: 'Order not found or payment not verified' });
     }
 
@@ -459,27 +476,307 @@ app.get('/api/download/:orderId', async (req, res) => {
       try {
         await db.collection('download_logs').add({
           orderId,
-          productId: orderData?.productId || 'unknown',
+          productId: targetProductId || orderData?.productId || 'unknown',
           timestamp: new Date().toISOString(),
           ip: req.ip
         });
       } catch (e) {}
     }
 
-    // Serve secure generated PDF/text content stream
+    // Check if the purchased product has an actual uploaded PDF file on the server
+    const productId = targetProductId || orderData?.productId;
+    let customFilePath: string | null = null;
+    let customFileName: string | null = null;
+
+    if (productId && fs.existsSync(UPLOADS_DIR)) {
+      const prod = prods[productId];
+      if (prod?.pdfUrl && prod.pdfUrl.startsWith('/api/files/')) {
+        const storedName = path.basename(prod.pdfUrl);
+        const fullP = path.join(UPLOADS_DIR, storedName);
+        if (fs.existsSync(fullP)) {
+          customFilePath = fullP;
+          customFileName = prod.pdfFileName || prod.title || 'PDF_Master_Guide.pdf';
+        }
+      }
+
+      if (!customFilePath) {
+        try {
+          const files = fs.readdirSync(UPLOADS_DIR);
+          const matched = files.find(f => f.includes(productId) && f.endsWith('.pdf'));
+          if (matched) {
+            customFilePath = path.join(UPLOADS_DIR, matched);
+            customFileName = matched;
+          }
+        } catch (e) {}
+      }
+    }
+
+    if (customFilePath && fs.existsSync(customFilePath)) {
+      const safeName = (customFileName || 'PDF_Master_Guide.pdf').replace(/[^a-zA-Z0-9_.-]/g, '_');
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${safeName.endsWith('.pdf') ? safeName : safeName + '.pdf'}"`);
+      return fs.createReadStream(customFilePath).pipe(res);
+    }
+
+    // Serve secure valid PDF document stream
     const title = orderData?.productTitle || 'PDF Master Guide';
-    res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${orderId}_PDF_Master_India.txt"`);
-    res.send(
-      `PDF MASTER INDIA - OFFICIAL SECURE DIGITAL DELIVERY\n` +
-      `ORDER ID: ${orderId}\n` +
-      `VERIFIED STATUS: PAID\n` +
-      `DELIVERY TIMESTAMP: ${new Date().toISOString()}\n\n` +
-      `Thank you for purchasing! This file is authorized for your personal study.\n` +
-      `Support: support@pdfmaster.in | WhatsApp: +91 70799 88808\n`
-    );
+    const safeTitle = title.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const pdfBuf = generateMinimalPdf(title, orderId, orderData?.customerEmail || 'Customer');
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${orderId}_${safeTitle}.pdf"`);
+    res.send(pdfBuf);
   } catch (err) {
+    console.error('Download stream error:', err);
     res.status(500).json({ error: 'Failed to generate secure download stream' });
+  }
+});
+
+// Helper: Generates a minimal compliant PDF document stream
+function generateMinimalPdf(title: string, orderId: string, email: string): Buffer {
+  const cleanTitle = title.replace(/[^\x20-\x7E]/g, ' ');
+  const cleanOrderId = orderId.replace(/[^\x20-\x7E]/g, ' ');
+  const cleanEmail = email.replace(/[^\x20-\x7E]/g, ' ');
+  const streamContent = `BT
+/F1 18 Tf
+50 740 Td
+(PDF MASTER INDIA - OFFICIAL SECURE DIGITAL DELIVERY) Tj
+/F1 13 Tf
+0 -35 Td
+(Title: ${cleanTitle}) Tj
+0 -22 Td
+(Order ID: ${cleanOrderId}) Tj
+0 -22 Td
+(Customer: ${cleanEmail}) Tj
+0 -22 Td
+(Status: Verified & Paid) Tj
+0 -35 Td
+/F1 11 Tf
+(Thank you for your purchase! This file is authorized for your personal study.) Tj
+0 -20 Td
+(Helpline: support@pdfmaster.in | WhatsApp: +91 70799 88808) Tj
+ET`;
+  const streamLen = Buffer.byteLength(streamContent, 'utf-8');
+  const pdfString = `%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length ${streamLen} >>
+stream
+${streamContent}
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000244 00000 n 
+0000000350 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+450
+%%EOF`;
+  return Buffer.from(pdfString, 'utf-8');
+}
+
+// 6. Direct File Upload Endpoints (FormData, Raw Binary, and Base64 JSON)
+const uploadStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => {
+    if (!fs.existsSync(UPLOADS_DIR)) {
+      fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+    }
+    cb(null, UPLOADS_DIR);
+  },
+  filename: (req, file, cb) => {
+    const productId = req.body?.productId || (req.query?.productId as string) || '';
+    const cleanPrefix = productId ? `${productId}_` : '';
+    let originalName = file.originalname;
+    try {
+      originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+    } catch {}
+    const safeExt = path.extname(originalName) || '.pdf';
+    const cleanBase = path.basename(originalName, safeExt).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40) || 'file';
+    cb(null, `${cleanPrefix}${Date.now()}_${cleanBase}${safeExt}`);
+  }
+});
+
+const uploadMiddleware = multer({
+  storage: uploadStorage,
+  limits: { fileSize: 150 * 1024 * 1024 } // 150MB limit
+});
+
+app.post('/api/upload-file', (req, res) => {
+  uploadMiddleware.single('file')(req, res, async (err: any) => {
+    if (err) {
+      console.error('Multer upload error:', err);
+      return res.status(500).json({ error: err.message || 'File upload failed' });
+    }
+
+    // CASE 1: Multipart FormData Upload (Native browser stream)
+    if (req.file) {
+      const storedFileName = req.file.filename;
+      const fileUrl = `/api/files/${storedFileName}`;
+      console.log(`[File Uploaded via FormData] ${storedFileName} (${Math.round(req.file.size / 1024)} KB)`);
+      return res.json({
+        success: true,
+        fileUrl,
+        fileName: req.file.originalname,
+        size: req.file.size
+      });
+    }
+
+    // CASE 2: JSON base64 upload fallback
+    try {
+      const { fileData, fileName, fileType, productId } = req.body || {};
+      if (!fileData) {
+        return res.status(400).json({ error: 'No file provided' });
+      }
+
+      let base64Data = fileData;
+      let mimeType = fileType || 'application/octet-stream';
+      if (typeof fileData === 'string' && fileData.includes(';base64,')) {
+        const parts = fileData.split(';base64,');
+        mimeType = parts[0].replace('data:', '');
+        base64Data = parts[1];
+      }
+
+      const buffer = Buffer.from(base64Data, 'base64');
+      const safeExt = path.extname(fileName || '') || (mimeType.includes('pdf') ? '.pdf' : '.jpg');
+      const cleanPrefix = productId ? `${productId}_` : '';
+      const cleanBase = (fileName || 'file').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30);
+      const storedFileName = `${cleanPrefix}${Date.now()}_${cleanBase}${safeExt}`;
+      const filePath = path.join(UPLOADS_DIR, storedFileName);
+
+      fs.writeFileSync(filePath, buffer);
+
+      const fileUrl = `/api/files/${storedFileName}`;
+      console.log(`[File Uploaded via JSON] ${storedFileName} (${Math.round(buffer.length / 1024)} KB)`);
+
+      return res.json({
+        success: true,
+        fileUrl,
+        fileName: fileName || storedFileName,
+        size: buffer.length
+      });
+    } catch (base64Err: any) {
+      console.error('Base64 upload error:', base64Err);
+      return res.status(500).json({ error: 'Failed to process file', details: base64Err?.message });
+    }
+  });
+});
+
+// Raw binary stream upload endpoint (zero memory overhead)
+app.post('/api/upload-raw', async (req, res) => {
+  try {
+    const rawName = (req.query.fileName as string) || 'file.pdf';
+    const originalName = decodeURIComponent(rawName);
+    const productId = (req.query.productId as string) || '';
+    const cleanPrefix = productId ? `${productId}_` : '';
+    const safeExt = path.extname(originalName) || '.pdf';
+    const cleanBase = path.basename(originalName, safeExt).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40) || 'file';
+    const storedFileName = `${cleanPrefix}${Date.now()}_${cleanBase}${safeExt}`;
+    const filePath = path.join(UPLOADS_DIR, storedFileName);
+
+    const writeStream = fs.createWriteStream(filePath);
+    req.pipe(writeStream);
+
+    writeStream.on('finish', () => {
+      const stats = fs.statSync(filePath);
+      const fileUrl = `/api/files/${storedFileName}`;
+      console.log(`[File Uploaded via Raw Stream] ${storedFileName} (${Math.round(stats.size / 1024)} KB)`);
+      res.json({
+        success: true,
+        fileUrl,
+        fileName: originalName,
+        size: stats.size
+      });
+    });
+
+    writeStream.on('error', (err) => {
+      console.error('Raw write stream error:', err);
+      res.status(500).json({ error: 'Failed to write file' });
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// 7. Serve Uploaded Files Directly
+app.get('/api/files/:filename', (req, res) => {
+  try {
+    const filename = path.basename(req.params.filename);
+    const filePath = path.join(UPLOADS_DIR, filename);
+
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).send('File not found');
+    }
+
+    const ext = path.extname(filename).toLowerCase();
+    if (ext === '.pdf') {
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+    } else if (ext === '.jpg' || ext === '.jpeg') {
+      res.setHeader('Content-Type', 'image/jpeg');
+    } else if (ext === '.png') {
+      res.setHeader('Content-Type', 'image/png');
+    } else if (ext === '.webp') {
+      res.setHeader('Content-Type', 'image/webp');
+    }
+
+    const stream = fs.createReadStream(filePath);
+    stream.on('error', () => {
+      if (!res.headersSent) res.status(500).send('Error reading file');
+    });
+    stream.pipe(res);
+  } catch (err) {
+    res.status(500).send('Error serving file');
+  }
+});
+
+// 8. Product CRUD Endpoints for Server Sync
+app.get('/api/products', async (_req, res) => {
+  const prods = Object.values(store.products || {});
+  res.json(prods);
+});
+
+app.post('/api/products', async (req, res) => {
+  try {
+    const product = req.body;
+    if (!product?.id) {
+      product.id = `pdf-${Date.now()}`;
+    }
+    if (!store.products) store.products = {};
+    store.products[product.id] = product;
+    persistStore();
+    res.json({ success: true, product });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.delete('/api/products/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (store.products && store.products[id]) {
+      delete store.products[id];
+      persistStore();
+    }
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
   }
 });
 

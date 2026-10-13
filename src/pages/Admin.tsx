@@ -119,6 +119,7 @@ export default function Admin() {
       return;
     }
     const reader = new FileReader();
+    reader.onerror = () => showNotify('⚠️ Photo read karne mein error aaya');
     reader.onload = (event) => {
       const result = event.target?.result as string;
       if (result) {
@@ -136,6 +137,7 @@ export default function Admin() {
       return;
     }
     const reader = new FileReader();
+    reader.onerror = () => showNotify('⚠️ Photo read karne mein error aaya');
     reader.onload = (event) => {
       const result = event.target?.result as string;
       if (result) {
@@ -223,6 +225,7 @@ export default function Admin() {
       return;
     }
     const reader = new FileReader();
+    reader.onerror = () => showNotify('⚠️ Combo cover photo read karne mein error aaya');
     reader.onload = () => {
       if (typeof reader.result === 'string') {
         setBundleCoverImage(reader.result);
@@ -247,8 +250,14 @@ export default function Admin() {
 
   // Local File Upload states
   const [uploadedCoverName, setUploadedCoverName] = useState<string | null>(null);
+  const [uploadedCoverFile, setUploadedCoverFile] = useState<File | null>(null);
   const [uploadedPdfName, setUploadedPdfName] = useState<string | null>(null);
+  const [uploadedPdfFile, setUploadedPdfFile] = useState<File | null>(null);
+  const [uploadedSampleFiles, setUploadedSampleFiles] = useState<File[]>([]);
   const [uploadedPdfData, setUploadedPdfData] = useState<string | null>(null);
+  const [uploadedPdfUrl, setUploadedPdfUrl] = useState<string | null>(null);
+  const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
+  const [uploadStatusText, setUploadStatusText] = useState('');
 
   // PDF Inside Pages & Sample Material for Horizontal Carousel
   const [formSamplePages, setFormSamplePages] = useState<string[]>([]);
@@ -335,21 +344,95 @@ export default function Admin() {
     }
   };
 
+  // Robust, native file upload helper (zero FileReader errors, supports any file size)
+  const uploadFileToServer = async (file: File, productId: string, fileType: 'pdf' | 'image') => {
+    // METHOD 1: Native multipart/form-data upload via FormData (Fastest, standard, zero memory buffer)
+    try {
+      const formData = new FormData();
+      formData.append('file', file, file.name);
+      formData.append('productId', productId);
+      formData.append('fileType', fileType);
+
+      const res = await fetch('/api/upload-file', {
+        method: 'POST',
+        body: formData
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.fileUrl) return data;
+      }
+    } catch (formErr) {
+      console.warn('FormData upload attempt notice, trying raw stream:', formErr);
+    }
+
+    // METHOD 2: Direct raw binary stream upload (streams File Blob directly to server disk)
+    try {
+      const query = `?fileName=${encodeURIComponent(file.name)}&productId=${encodeURIComponent(productId)}`;
+      const res = await fetch(`/api/upload-raw${query}`, {
+        method: 'POST',
+        headers: { 'Content-Type': file.type || 'application/octet-stream' },
+        body: file
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.fileUrl) return data;
+      }
+    } catch (rawErr) {
+      console.warn('Raw stream upload attempt notice, trying arrayBuffer:', rawErr);
+    }
+
+    // METHOD 3: ArrayBuffer upload fallback
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const bytes = new Uint8Array(arrayBuffer);
+      let binary = '';
+      const chunk = 8192;
+      for (let i = 0; i < bytes.length; i += chunk) {
+        binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+      }
+      const base64Data = window.btoa(binary);
+
+      const res = await fetch('/api/upload-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileData: base64Data,
+          fileName: file.name,
+          fileType: file.type || (fileType === 'pdf' ? 'application/pdf' : 'image/jpeg'),
+          productId
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.fileUrl) return data;
+      }
+    } catch (fallbackErr) {
+      console.error('All upload pipelines failed:', fallbackErr);
+    }
+
+    throw new Error(`Device se "${file.name}" upload karne mein problem aayi. Kripya dobara file select karein.`);
+  };
+
   // Handle Cover Image File Selection from Mobile Gallery / PC
   const handleCoverFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 8 * 1024 * 1024) {
-        showNotify('File size too large. Please select an image under 8MB.');
+      if (file.size > 20 * 1024 * 1024) {
+        showNotify('File size too large. Please select an image under 20MB.');
         return;
       }
+      setUploadedCoverFile(file);
       setUploadedCoverName(file.name);
-      const reader = new FileReader();
-      reader.onload = () => {
-        setFormCoverImage(reader.result as string);
-        showNotify(`Cover image "${file.name}" selected!`);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const previewUrl = URL.createObjectURL(file);
+        setFormCoverImage(previewUrl);
+      } catch (err) {
+        console.warn('URL.createObjectURL notice:', err);
+      }
+      showNotify(`✓ Cover photo "${file.name}" selected!`);
     }
   };
 
@@ -357,13 +440,14 @@ export default function Admin() {
   const handlePdfFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 100 * 1024 * 1024) {
+        showNotify('File size too large. Please select a PDF under 100MB.');
+        return;
+      }
+      setUploadedPdfFile(file);
       setUploadedPdfName(file.name);
-      const reader = new FileReader();
-      reader.onload = () => {
-        setUploadedPdfData(reader.result as string);
-        showNotify(`PDF Document "${file.name}" ready for upload!`);
-      };
-      reader.readAsDataURL(file);
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+      showNotify(`✓ PDF Document "${file.name}" (${sizeMb} MB) ready for upload!`);
     }
   };
 
@@ -373,26 +457,17 @@ export default function Admin() {
     if (!files || files.length === 0) return;
 
     const fileList = Array.from(files);
-    let loadedCount = 0;
-    const newPages: string[] = [];
-
-    fileList.forEach((file) => {
-      if (file.size > 8 * 1024 * 1024) {
-        showNotify(`"${file.name}" is over 8MB, skipped.`);
-        return;
+    setUploadedSampleFiles((prev) => [...prev, ...fileList]);
+    const previewUrls = fileList.map((f) => {
+      try {
+        return URL.createObjectURL(f);
+      } catch {
+        return '';
       }
-      const reader = new FileReader();
-      reader.onload = () => {
-        newPages.push(reader.result as string);
-        loadedCount++;
-        if (loadedCount === fileList.length) {
-          setFormSamplePages((prev) => [...prev, ...newPages]);
-          showNotify(`✓ Added ${newPages.length} inside page(s) to carousel preview!`);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+    }).filter(Boolean);
 
+    setFormSamplePages((prev) => [...prev, ...previewUrls]);
+    showNotify(`✓ Attached ${fileList.length} inside page(s) to preview carousel!`);
     e.target.value = '';
   };
 
@@ -407,6 +482,7 @@ export default function Admin() {
   // Remove Individual Sample Page
   const handleRemoveSamplePage = (indexToRemove: number) => {
     setFormSamplePages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
+    setUploadedSampleFiles((prev) => prev.filter((_, idx) => idx !== indexToRemove));
     showNotify(`Removed sample page #${indexToRemove + 1}`);
   };
 
@@ -422,8 +498,13 @@ export default function Admin() {
     setFormBadge('New');
     setFormCoverImage('');
     setUploadedCoverName(null);
+    setUploadedCoverFile(null);
     setUploadedPdfName(null);
+    setUploadedPdfFile(null);
     setUploadedPdfData(null);
+    setUploadedPdfUrl(null);
+    setUploadedSampleFiles([]);
+    setUploadStatusText('');
     setFormPagesCount(120);
     setFormLanguage('Hindi + English');
     setFormSamplePages([
@@ -436,101 +517,150 @@ export default function Admin() {
 
   const handleOpenEditModal = (p: Product) => {
     setEditingProduct(p);
-    setFormTitle(p.title);
-    setFormCategory(p.category);
-    setFormPrice(p.price);
-    setFormOldPrice(p.oldPrice);
-    setFormRating(p.rating);
-    setFormDescription(p.description);
-    setFormHighlights(p.highlights?.join('\n') || '');
+    setFormTitle(p.title || '');
+    setFormCategory(p.category || 'AI Tools');
+    setFormPrice(p.price || 99);
+    setFormOldPrice(p.oldPrice || 199);
+    setFormRating(p.rating || 4.8);
+    setFormDescription(p.description || '');
+    setFormHighlights((p.highlights || []).join('\n'));
     setFormBadge(p.badge || '');
-    setFormCoverImage(p.coverImage);
+    setFormCoverImage(p.coverImage || '');
     setUploadedCoverName(null);
-    setUploadedPdfName(null);
+    setUploadedCoverFile(null);
+    setUploadedPdfName(p.pdfFileName || (p.pdfUrl ? 'Existing Uploaded PDF' : null));
+    setUploadedPdfFile(null);
     setUploadedPdfData(null);
+    setUploadedPdfUrl(p.pdfUrl || null);
+    setUploadedSampleFiles([]);
+    setUploadStatusText('');
     setFormPagesCount(p.pdfPagesCount || 120);
     setFormLanguage(p.language || 'Hindi + English');
     const existingPages = (p.previewImages && p.previewImages.length > 0)
       ? p.previewImages
       : (p.samplePages && p.samplePages.length > 0)
       ? p.samplePages
-      : [p.coverImage];
-    setFormSamplePages(existingPages);
+      : [p.coverImage || ''];
+    setFormSamplePages(existingPages.filter(Boolean));
     setIsModalOpen(true);
   };
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    const highlightsArr = formHighlights.split('\n').filter((l) => l.trim().length > 0);
+    if (!formTitle.trim()) {
+      showNotify('⚠️ Kripya Product Title enter karein');
+      return;
+    }
 
-    const cover = formCoverImage || createBookCoverSvg(
-      formTitle.slice(0, 24),
-      'Practical Edition',
-      ['#0F172A', '#1E3A8A'],
-      '#F59E0B',
-      formBadge || 'PRO',
-      'book'
-    );
+    setIsSubmittingProduct(true);
+    setUploadStatusText('Uploading files to secure server...');
 
-    const pagesToSave = formSamplePages.length > 0
-      ? formSamplePages
-      : [cover, createSamplePageSvg(1, formTitle || 'Inside Guide')];
+    try {
+      const generatedOrExistingId = editingProduct?.id || `pdf-${Date.now()}`;
 
-    let savedProductId = '';
+      // 1. Upload Cover Image if a local file was selected
+      let finalCoverImage = formCoverImage;
+      if (uploadedCoverFile) {
+        setUploadStatusText('Book Cover image upload ho rahi hai...');
+        const coverUploadRes = await uploadFileToServer(uploadedCoverFile, generatedOrExistingId, 'image');
+        finalCoverImage = coverUploadRes.fileUrl;
+      } else if (!finalCoverImage || finalCoverImage.startsWith('blob:')) {
+        finalCoverImage = createBookCoverSvg(
+          formTitle.slice(0, 24),
+          'Practical Edition',
+          ['#0F172A', '#1E3A8A'],
+          '#F59E0B',
+          formBadge || 'PRO',
+          'book'
+        );
+      }
 
-    if (editingProduct) {
-      await updateProduct(editingProduct.id, {
-        title: formTitle,
-        category: formCategory,
-        price: Number(formPrice),
-        oldPrice: Number(formOldPrice),
-        rating: Number(formRating),
-        description: formDescription,
-        highlights: highlightsArr,
-        badge: formBadge,
-        coverImage: cover,
-        pdfPagesCount: Number(formPagesCount),
-        language: formLanguage,
-        previewImages: pagesToSave,
-        samplePages: pagesToSave
-      });
-      savedProductId = editingProduct.id;
-      showNotify(`✓ Updated "${formTitle}" successfully!`);
-    } else {
-      savedProductId = await addProduct({
-        title: formTitle,
-        category: formCategory,
-        price: Number(formPrice),
-        oldPrice: Number(formOldPrice),
-        rating: Number(formRating),
-        reviewsCount: 15,
-        description: formDescription,
-        highlights: highlightsArr,
-        features: highlightsArr,
-        badge: formBadge,
-        coverImage: cover,
-        pdfPagesCount: Number(formPagesCount),
-        fileSize: uploadedPdfName ? 'Uploaded PDF' : '18.4 MB',
-        language: formLanguage,
-        tableOfContents: [
+      // 2. Upload PDF Document if a local file was selected
+      let finalPdfUrl = editingProduct?.pdfUrl || uploadedPdfUrl || '';
+      let finalPdfFileName = uploadedPdfName || editingProduct?.pdfFileName || '';
+      let finalFileSize = editingProduct?.fileSize || '18.4 MB';
+
+      if (uploadedPdfFile) {
+        setUploadStatusText(`PDF Document "${uploadedPdfFile.name}" upload ho raha hai...`);
+        const pdfUploadRes = await uploadFileToServer(uploadedPdfFile, generatedOrExistingId, 'pdf');
+        finalPdfUrl = pdfUploadRes.fileUrl;
+        finalPdfFileName = pdfUploadRes.fileName;
+        const mb = (uploadedPdfFile.size / (1024 * 1024)).toFixed(1);
+        finalFileSize = `${mb} MB`;
+      }
+
+      // 3. Upload Inside Preview Pages if any selected
+      let finalSamplePages: string[] = [];
+      if (uploadedSampleFiles.length > 0) {
+        setUploadStatusText('Inside preview pages process ho rahe hain...');
+        for (let i = 0; i < uploadedSampleFiles.length; i++) {
+          const sf = uploadedSampleFiles[i];
+          const sRes = await uploadFileToServer(sf, `${generatedOrExistingId}_sample_${i + 1}`, 'image');
+          finalSamplePages.push(sRes.fileUrl);
+        }
+      } else {
+        finalSamplePages = formSamplePages.filter((p) => p && !p.startsWith('blob:'));
+        if (finalSamplePages.length === 0) {
+          finalSamplePages = [finalCoverImage, createSamplePageSvg(1, formTitle || 'Inside Guide')];
+        }
+      }
+
+      const highlightsArr = formHighlights
+        .split('\n')
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+
+      const productPayload: Omit<Product, 'id'> = {
+        title: formTitle.trim(),
+        category: formCategory || 'AI Tools',
+        price: Number(formPrice) || 99,
+        oldPrice: Number(formOldPrice) || 199,
+        rating: Number(formRating) || 4.8,
+        reviewsCount: editingProduct?.reviewsCount || 18,
+        description: formDescription.trim() || 'Comprehensive practical digital guide with instant download access.',
+        highlights: highlightsArr.length > 0 ? highlightsArr : ['Step-by-step practical guide', 'Lifetime validity & mobile reading', 'Instant verified PDF delivery'],
+        features: highlightsArr.length > 0 ? highlightsArr : ['Direct digital download', 'High quality format', 'Lifetime access'],
+        badge: formBadge.trim() || 'New',
+        coverImage: finalCoverImage,
+        pdfPagesCount: Number(formPagesCount) || 120,
+        fileSize: finalFileSize,
+        language: formLanguage.trim() || 'Hindi + English',
+        pdfUrl: finalPdfUrl,
+        pdfFileName: finalPdfFileName,
+        tableOfContents: editingProduct?.tableOfContents || [
           { chapter: 'Chapter 1', title: 'Introduction & Foundations', pages: '01 - 30' },
           { chapter: 'Chapter 2', title: 'Actionable Frameworks', pages: '31 - 70' }
         ],
-        previewImages: pagesToSave,
-        samplePages: pagesToSave,
-        videos: [],
-        reviews: [],
-        faqs: [{ question: 'How is it delivered?', answer: 'Instant PDF download link upon verified payment.' }]
-      });
-      showNotify(`✓ Added "${formTitle}" successfully!`);
-    }
+        previewImages: finalSamplePages,
+        samplePages: finalSamplePages,
+        videos: editingProduct?.videos || [],
+        reviews: editingProduct?.reviews || [],
+        faqs: editingProduct?.faqs || [
+          { question: 'How is it delivered?', answer: 'Instant PDF download link upon verified payment.' }
+        ]
+      };
 
-    // If PDF file was selected, save it for downloads
-    if (uploadedPdfData && uploadedPdfName && savedProductId) {
-      saveCustomPdfFile(savedProductId, uploadedPdfData, uploadedPdfName);
-    }
+      setUploadStatusText('Saving product to database...');
 
-    setIsModalOpen(false);
+      if (editingProduct) {
+        await updateProduct(editingProduct.id, productPayload);
+        showNotify(`✓ "${formTitle}" updated successfully!`);
+      } else {
+        await addProduct(productPayload);
+        showNotify(`✓ Added "${formTitle}" successfully! Live and ready for customers.`);
+      }
+
+      setIsModalOpen(false);
+      setUploadedCoverFile(null);
+      setUploadedPdfFile(null);
+      setUploadedSampleFiles([]);
+    } catch (err: any) {
+      console.error('Save product error:', err);
+      showNotify(`⚠️ Error: ${err?.message || 'Failed to save product. Please try again.'}`);
+    } finally {
+      setIsSubmittingProduct(false);
+      setUploadStatusText('');
+    }
   };
 
   // Perform Delete (triggered from custom modal)
@@ -624,7 +754,11 @@ export default function Admin() {
   };
 
   const filteredProducts = products.filter((p) => {
-    const matchesQuery = p.title.toLowerCase().includes(searchQuery.toLowerCase()) || p.category.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!p) return false;
+    const q = (searchQuery || '').toLowerCase();
+    const titleMatch = (p.title || '').toLowerCase().includes(q);
+    const catMatch = (p.category || '').toLowerCase().includes(q);
+    const matchesQuery = titleMatch || catMatch;
     const matchesCategory = categoryFilter === 'all' || p.category === categoryFilter;
     return matchesQuery && matchesCategory;
   });
@@ -2559,22 +2693,48 @@ export default function Admin() {
                 />
               </div>
 
+              {/* Upload Status Banner */}
+              {isSubmittingProduct && (
+                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-xl flex items-center gap-3 text-xs text-emerald-900 font-bold shadow-xs animate-pulse">
+                  <RefreshCw size={18} className="animate-spin text-emerald-600 shrink-0" />
+                  <div className="flex-1">
+                    <span className="block">{uploadStatusText || 'Uploading files to server & publishing...'}</span>
+                    <span className="text-[10px] text-emerald-700 font-normal">Kripya thoda intezar karein, window band na karein.</span>
+                  </div>
+                </div>
+              )}
+
               <div className="pt-4 flex flex-col sm:flex-row items-center justify-end gap-2.5 border-t border-gray-200">
                 <button
                   type="button"
+                  disabled={isSubmittingProduct}
                   onClick={() => setIsModalOpen(false)}
-                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs border border-gray-300 transition-colors"
+                  className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs border border-gray-300 transition-colors disabled:opacity-50"
                 >
                   Cancel (کینسل کریں)
                 </button>
                 <button
                   type="submit"
-                  className="w-full sm:w-auto px-7 py-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs sm:text-sm tracking-wide shadow-lg border border-emerald-500 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  disabled={isSubmittingProduct}
+                  className={`w-full sm:w-auto px-7 py-3 rounded-xl text-white font-black text-xs sm:text-sm tracking-wide shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                    isSubmittingProduct
+                      ? 'bg-emerald-700 opacity-80 cursor-wait'
+                      : 'bg-emerald-600 hover:bg-emerald-700 active:scale-95 border border-emerald-500'
+                  }`}
                 >
-                  <Check size={18} className="text-white stroke-[3]" />
-                  <span className="text-white font-black">
-                    {editingProduct ? '✓ Save Changes (تبدیلیاں محفوظ کریں)' : '✓ Upload & Publish PDF (پی ڈی ایف محفوظ کریں)'}
-                  </span>
+                  {isSubmittingProduct ? (
+                    <>
+                      <RefreshCw size={18} className="animate-spin text-white" />
+                      <span>Publishing PDF...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check size={18} className="text-white stroke-[3]" />
+                      <span>
+                        {editingProduct ? '✓ Save Changes (تبدیلیاں محفوظ کریں)' : '✓ Upload & Publish PDF (پی ڈی ایف محفوظ کریں)'}
+                      </span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

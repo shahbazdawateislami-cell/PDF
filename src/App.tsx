@@ -13,26 +13,29 @@ import Purchases from './pages/Purchases';
 import Wishlist from './pages/Wishlist';
 import Cart from './pages/Cart';
 import { WhatsAppFloatingButton } from './components/WhatsAppFloatingButton';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 export default function App() {
   return (
-    <AuthProvider>
-      <ProductProvider>
-        <Router>
-          <Routes>
-            <Route path="/" element={<Home />} />
-            <Route path="/product/:id" element={<ProductDetails />} />
-            <Route path="/checkout/:id" element={<Checkout />} />
-            <Route path="/success/:orderId" element={<Success />} />
-            <Route path="/all" element={<AllProducts />} />
-            <Route path="/admin" element={<Admin />} />
-            <Route path="/purchases" element={<Purchases />} />
-            <Route path="/wishlist" element={<Wishlist />} />
-            <Route path="/cart" element={<Cart />} />
-          </Routes>
-          <WhatsAppFloatingButton />
-        </Router>
-      </ProductProvider>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <ProductProvider>
+          <Router>
+            <Routes>
+              <Route path="/" element={<Home />} />
+              <Route path="/product/:id" element={<ProductDetails />} />
+              <Route path="/checkout/:id" element={<Checkout />} />
+              <Route path="/success/:orderId" element={<Success />} />
+              <Route path="/all" element={<AllProducts />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/purchases" element={<Purchases />} />
+              <Route path="/wishlist" element={<Wishlist />} />
+              <Route path="/cart" element={<Cart />} />
+            </Routes>
+            <WhatsAppFloatingButton />
+          </Router>
+        </ProductProvider>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }

@@ -262,13 +262,19 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return DEFAULT_HERO_CONFIG;
   });
 
-  // Persistent storage effects
+  // Persistent storage effects with QuotaExceededError guards
   useEffect(() => {
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(products));
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(products));
+    } catch (e) {
+      console.warn('LocalStorage quota notice for products, synced with server:', e);
+    }
   }, [products]);
 
   useEffect(() => {
-    localStorage.setItem(BUNDLES_STORAGE_KEY, JSON.stringify(bundles));
+    try {
+      localStorage.setItem(BUNDLES_STORAGE_KEY, JSON.stringify(bundles));
+    } catch (e) {}
   }, [bundles]);
 
   useEffect(() => {
@@ -278,19 +284,27 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   }, [coupons]);
 
   useEffect(() => {
-    localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+    try {
+      localStorage.setItem(CART_STORAGE_KEY, JSON.stringify(cart));
+    } catch (e) {}
   }, [cart]);
 
   useEffect(() => {
-    localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(wishlist));
+    try {
+      localStorage.setItem(WISHLIST_STORAGE_KEY, JSON.stringify(wishlist));
+    } catch (e) {}
   }, [wishlist]);
 
   useEffect(() => {
-    localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
+    try {
+      localStorage.setItem(ORDERS_STORAGE_KEY, JSON.stringify(orders));
+    } catch (e) {}
   }, [orders]);
 
   useEffect(() => {
-    localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(downloadLogs));
+    try {
+      localStorage.setItem(LOGS_STORAGE_KEY, JSON.stringify(downloadLogs));
+    } catch (e) {}
   }, [downloadLogs]);
 
   useEffect(() => {
@@ -301,16 +315,38 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [heroConfig]);
 
-  // Sync with Firestore in background if available
+  // Sync with Server and Firestore in background
   useEffect(() => {
-    async function syncFirestore() {
+    async function syncData() {
+      // 1. Sync custom products from server database
+      try {
+        const res = await fetch('/api/products');
+        if (res.ok) {
+          const serverProducts: Product[] = await res.json();
+          if (Array.isArray(serverProducts) && serverProducts.length > 0) {
+            setProducts((prev) => {
+              const map = new Map<string, Product>();
+              prev.forEach((p) => map.set(p.id, p));
+              serverProducts.forEach((p) => map.set(p.id, p));
+              return Array.from(map.values());
+            });
+          }
+        }
+      } catch (err) {}
+
+      // 2. Sync with Firestore
       try {
         const snap = await getDocs(collection(db, 'products'));
         if (!snap.empty) {
           const dbProducts: Product[] = [];
           snap.forEach((d) => dbProducts.push(d.data() as Product));
           if (dbProducts.length > 0) {
-            setProducts(dbProducts);
+            setProducts((prev) => {
+              const map = new Map<string, Product>();
+              prev.forEach((p) => map.set(p.id, p));
+              dbProducts.forEach((p) => map.set(p.id, p));
+              return Array.from(map.values());
+            });
           }
         }
 
@@ -325,7 +361,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         // Fallback to local
       }
     }
-    syncFirestore();
+    syncData();
   }, []);
 
   const addProduct = async (data: Omit<Product, 'id'>): Promise<string> => {
@@ -337,18 +373,46 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
     setProducts((prev) => [newProduct, ...prev]);
 
+    // Save to server database
+    try {
+      await fetch('/api/products', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newProduct)
+      });
+    } catch (e) {
+      console.warn('Server product save notice:', e);
+    }
+
     try {
       await setDoc(doc(db, 'products', newId), newProduct);
     } catch (e) {
-      console.warn('Firestore write failed, saved to local state only:', e);
+      console.warn('Firestore write notice:', e);
     }
     return newId;
   };
 
   const updateProduct = async (id: string, updated: Partial<Product>): Promise<void> => {
+    let fullUpdatedProduct: Product | undefined;
     setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, ...updated } : p))
+      prev.map((p) => {
+        if (p.id === id) {
+          fullUpdatedProduct = { ...p, ...updated };
+          return fullUpdatedProduct;
+        }
+        return p;
+      })
     );
+
+    if (fullUpdatedProduct) {
+      try {
+        await fetch('/api/products', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fullUpdatedProduct)
+        });
+      } catch (e) {}
+    }
 
     try {
       await setDoc(doc(db, 'products', id), updated, { merge: true });
@@ -359,6 +423,10 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deleteProduct = async (id: string): Promise<void> => {
     setProducts((prev) => prev.filter((p) => p.id !== id));
+
+    try {
+      await fetch(`/api/products/${id}`, { method: 'DELETE' });
+    } catch (e) {}
 
     try {
       await deleteDoc(doc(db, 'products', id));
@@ -489,18 +557,26 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch (e) {}
   };
 
-  // Custom PDF File Storage
+  // In-memory cache for custom uploaded PDF files
+  const [customPdfMap] = useState<Map<string, { data: string; name: string }>>(() => new Map());
+
   const saveCustomPdfFile = (productId: string, fileData: string, fileName: string) => {
+    customPdfMap.set(productId, { data: fileData, name: fileName });
     try {
-      const existing = JSON.parse(localStorage.getItem(PDF_FILES_STORAGE_KEY) || '{}');
-      existing[productId] = { data: fileData, name: fileName };
-      localStorage.setItem(PDF_FILES_STORAGE_KEY, JSON.stringify(existing));
+      if (fileData && fileData.length < 500000) {
+        const existing = JSON.parse(localStorage.getItem(PDF_FILES_STORAGE_KEY) || '{}');
+        existing[productId] = { data: fileData, name: fileName };
+        localStorage.setItem(PDF_FILES_STORAGE_KEY, JSON.stringify(existing));
+      }
     } catch (e) {
-      console.warn('Could not cache file data', e);
+      console.warn('LocalStorage limit reached for PDF storage, kept safely in memory & server:', e);
     }
   };
 
   const getCustomPdfFile = (productId: string): string | null => {
+    if (customPdfMap.has(productId)) {
+      return customPdfMap.get(productId)?.data || null;
+    }
     try {
       const existing = JSON.parse(localStorage.getItem(PDF_FILES_STORAGE_KEY) || '{}');
       return existing[productId]?.data || null;

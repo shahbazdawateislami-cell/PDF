@@ -92,7 +92,7 @@ export default function ProductDetails() {
             <div className="md:col-span-5 flex flex-col items-center">
               <div 
                 className="relative w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl bg-gray-50 border border-gray-100 group cursor-pointer"
-                onClick={() => openLightbox(product.previewImages, 0)}
+                onClick={() => openLightbox(product.previewImages?.length ? product.previewImages : [product.coverImage || ''], 0)}
               >
                 <img
                   src={product.coverImage}
@@ -165,7 +165,7 @@ export default function ProductDetails() {
 
                 {/* Highlights List */}
                 <ul className="mt-5 space-y-2 text-xs sm:text-sm text-gray-700">
-                  {product.highlights.map((item, idx) => (
+                  {(product.highlights || []).map((item, idx) => (
                     <li key={idx} className="flex items-center gap-2.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-gray-900 shrink-0" />
                       <span>{item}</span>

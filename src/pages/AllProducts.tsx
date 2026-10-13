@@ -32,14 +32,19 @@ export default function AllProducts() {
   }, [searchParams]);
 
   const filteredProducts = products.filter((p) => {
-    const matchesSearch = p.title.toLowerCase().includes(searchQuery.toLowerCase()) || p.category.toLowerCase().includes(searchQuery.toLowerCase()) || p.description.toLowerCase().includes(searchQuery.toLowerCase());
+    if (!p) return false;
+    const q = searchQuery.toLowerCase();
+    const titleMatch = (p.title || '').toLowerCase().includes(q);
+    const catMatch = (p.category || '').toLowerCase().includes(q);
+    const descMatch = (p.description || '').toLowerCase().includes(q);
+    const matchesSearch = titleMatch || catMatch || descMatch;
     
     if (!matchesSearch) return false;
 
     if (selectedCategory === 'all') return true;
-    if (selectedCategory === 'trending') return p.isTrending;
-    if (selectedCategory === 'bestselling') return p.isBestseller;
-    if (selectedCategory === 'new') return p.isNewArrival;
+    if (selectedCategory === 'trending') return !!p.isTrending;
+    if (selectedCategory === 'bestselling') return !!p.isBestseller;
+    if (selectedCategory === 'new') return !!p.isNewArrival;
 
     return p.category === selectedCategory;
   });

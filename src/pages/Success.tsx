@@ -92,34 +92,39 @@ export default function Success() {
       await logDownload(activeOrder.id, product.id, product.title, activeOrder.customerEmail);
     }
 
-    setTimeout(() => {
-      const content = `PDF MASTER INDIA - OFFICIAL DIGITAL EDITION\n\n` +
-        `TITLE: ${product.title}\n` +
-        `ORDER ID: ${activeOrder?.id || orderId || 'ORD_VERIFIED'}\n` +
-        `RAZORPAY PAYMENT ID: ${activeOrder?.razorpayPaymentId || 'VERIFIED_RZP'}\n` +
-        `CUSTOMER: ${activeOrder?.customerName || 'Valued Reader'} (${activeOrder?.customerEmail || ''})\n` +
-        `DATE: ${new Date().toLocaleDateString()}\n\n` +
-        `============================================================\n` +
-        `ABOUT THIS GUIDE:\n${product.description}\n\n` +
-        `KEY HIGHLIGHTS:\n${product.highlights.map(h => '• ' + h).join('\n')}\n\n` +
-        `TABLE OF CONTENTS:\n${product.tableOfContents.map(t => `${t.chapter}: ${t.title} (Pages: ${t.pages})`).join('\n')}\n\n` +
-        `============================================================\n` +
-        `Thank you for purchasing from PDF Master India!\n` +
-        `Helpline: support@pdfmaster.in | WhatsApp: +91 70799 88808\n`;
+    try {
+      // 1. Download real uploaded PDF file if available, or fetch from secure stream
+      const targetUrl = product?.pdfUrl || `/api/download/${activeOrder?.id || orderId}`;
+      const res = await fetch(targetUrl);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const cleanTitle = (product?.title || 'PDF_Master_Guide').replace(/[^a-zA-Z0-9_-]/g, '_');
+        link.download = `${cleanTitle}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        setDownloading(false);
+        setDownloadSuccess(true);
+        return;
+      }
+    } catch (e) {
+      console.warn('Direct stream fetch notice:', e);
+    }
 
-      const blob = new Blob([content], { type: 'application/pdf;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${product.title.replace(/[^a-zA-Z0-9]/g, '_')}_PDF_Master_India.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
+    // 2. Direct browser navigation fallback
+    const fallbackLink = document.createElement('a');
+    fallbackLink.href = `/api/download/${activeOrder?.id || orderId}`;
+    fallbackLink.download = `${(product?.title || 'PDF_Guide').replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+    document.body.appendChild(fallbackLink);
+    fallbackLink.click();
+    document.body.removeChild(fallbackLink);
 
-      setDownloading(false);
-      setDownloadSuccess(true);
-    }, 1000);
+    setDownloading(false);
+    setDownloadSuccess(true);
   };
 
   return (
@@ -314,7 +319,7 @@ export default function Success() {
               <div>
                 <h4 className="font-bold text-gray-900 mb-2">Curriculum Table of Contents:</h4>
                 <ul className="space-y-1.5 list-disc pl-5">
-                  {product.tableOfContents.map((t, idx) => (
+                  {(product.tableOfContents || []).map((t, idx) => (
                     <li key={idx}>
                       <span className="font-bold">{t.chapter}:</span> {t.title} ({t.pages})
                     </li>
@@ -324,7 +329,7 @@ export default function Success() {
 
               <div>
                 <h4 className="font-bold text-gray-900 mb-2">Core Frameworks &amp; Prompts:</h4>
-                {product.highlights.map((h, idx) => (
+                {(product.highlights || []).map((h, idx) => (
                   <p key={idx} className="mb-1 flex items-center gap-2">
                     <Check size={14} className="text-emerald-600 shrink-0" /> {h}
                   </p>

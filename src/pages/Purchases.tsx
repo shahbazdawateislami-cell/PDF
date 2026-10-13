@@ -25,26 +25,38 @@ export default function Purchases() {
     await logDownload(orderId, productId, title);
 
     setDownloadMsg(`Downloading "${title}"...`);
-    setTimeout(() => {
-      const content = `PDF MASTER INDIA - PURCHASED COPY\n` +
-        `TITLE: ${title}\n` +
-        `ORDER ID: ${orderId}\n` +
-        `VERIFIED: 100% Genuine Digital Edition\n` +
-        `DATE: ${new Date().toLocaleDateString()}\n\n` +
-        `Thank you for trusting PDF Master India!`;
+    try {
+      const prod = products.find((p) => p.id === productId);
+      const downloadTarget = prod?.pdfUrl || `/api/download/${orderId}?productId=${encodeURIComponent(productId)}`;
+      const res = await fetch(downloadTarget);
+      if (res.ok) {
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        const cleanName = (title || 'PDF_Master_Guide').replace(/[^a-zA-Z0-9_-]/g, '_');
+        link.download = `${cleanName}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+        setDownloadMsg(`✓ "${title}" downloaded successfully!`);
+        setTimeout(() => setDownloadMsg(null), 3500);
+        return;
+      }
+    } catch (e) {
+      console.warn('Direct stream download notice:', e);
+    }
 
-      const blob = new Blob([content], { type: 'application/pdf;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `${title.replace(/[^a-zA-Z0-9]/g, '_')}_PDF_Master_India.pdf`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-      setDownloadMsg(`✓ "${title}" downloaded successfully!`);
-      setTimeout(() => setDownloadMsg(null), 3500);
-    }, 1000);
+    // Direct browser navigation fallback
+    const fallbackLink = document.createElement('a');
+    fallbackLink.href = `/api/download/${orderId}?productId=${encodeURIComponent(productId)}`;
+    fallbackLink.download = `${title.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+    document.body.appendChild(fallbackLink);
+    fallbackLink.click();
+    document.body.removeChild(fallbackLink);
+    setDownloadMsg(`✓ "${title}" downloaded successfully!`);
+    setTimeout(() => setDownloadMsg(null), 3500);
   };
 
   return (

@@ -38,6 +38,7 @@ export interface Product {
   fileSize: string;
   language: string;
   pdfUrl?: string;
+  pdfFileName?: string;
   samplePdfText?: string;
   isTrending?: boolean;
   isBestseller?: boolean;
