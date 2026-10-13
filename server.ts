@@ -5,21 +5,90 @@ import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
-import { initializeApp, getApps } from 'firebase-admin/app';
-import { getFirestore } from 'firebase-admin/firestore';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const distPath = path.resolve(__dirname, 'dist');
+const DATA_DIR = path.resolve(__dirname, '.data');
+const DATA_FILE = path.join(DATA_DIR, 'server-db.json');
 
-dotenv.config();
-
-// Safely initialize Firebase Admin SDK
-let db: any = null;
-try {
-  if (getApps().length === 0) {
-    initializeApp();
-  }
-  db = getFirestore();
-} catch (e) {
-  console.warn('Firebase Admin initialized in fallback/in-memory mode:', e);
+interface LocalStore {
+  settings: Record<string, any>;
+  orders: Record<string, any>;
+  payments: Record<string, any>;
+  download_logs: any[];
 }
+
+let store: LocalStore = {
+  settings: {},
+  orders: {},
+  payments: {},
+  download_logs: []
+};
+
+function loadStore() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (fs.existsSync(DATA_FILE)) {
+      const content = fs.readFileSync(DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(content);
+      store = { ...store, ...parsed };
+    }
+  } catch (e) {
+    console.warn('Local store init fallback to memory:', e);
+  }
+}
+
+function persistStore() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), 'utf-8');
+  } catch (e) {
+    console.error('Failed to persist store:', e);
+  }
+}
+
+loadStore();
+
+// Zero-latency, persistent local database for orders, payments, and settings
+const db = {
+  collection: (collectionName: string) => ({
+    doc: (docId: string) => ({
+      get: async () => {
+        const col = (store as any)[collectionName] || {};
+        const data = col[docId];
+        return {
+          exists: !!data,
+          data: () => data
+        };
+      },
+      set: async (newData: any, options?: { merge?: boolean }) => {
+        if (!(store as any)[collectionName]) {
+          (store as any)[collectionName] = {};
+        }
+        if (options?.merge && (store as any)[collectionName][docId]) {
+          (store as any)[collectionName][docId] = {
+            ...(store as any)[collectionName][docId],
+            ...newData
+          };
+        } else {
+          (store as any)[collectionName][docId] = newData;
+        }
+        persistStore();
+      }
+    }),
+    add: async (item: any) => {
+      if (!(store as any)[collectionName]) {
+        (store as any)[collectionName] = [];
+      }
+      (store as any)[collectionName].push(item);
+      persistStore();
+    }
+  })
+};
 
 const app = express();
 
@@ -52,7 +121,7 @@ const updateRazorpayClient = (keyId: string, keySecret: string, webhookSecret?: 
   }
 };
 
-// Check Firestore on startup for saved keys
+// Check local store on startup for saved keys
 if (db) {
   db.collection('settings').doc('razorpay').get()
     .then((doc: any) => {
@@ -63,7 +132,7 @@ if (db) {
         }
       }
     })
-    .catch((err: any) => console.warn('Could not read saved keys from Firestore:', err));
+    .catch((err: any) => console.warn('Could not read saved keys from store:', err));
 }
 
 // Server-side price catalog to prevent price tampering
@@ -139,7 +208,7 @@ app.post('/api/create-order', async (req, res) => {
           createdAt: new Date().toISOString()
         });
       } catch (err) {
-        console.warn('Firestore order write error:', err);
+        console.warn('Order write error:', err);
       }
     }
 
@@ -303,7 +372,7 @@ app.post('/api/verify-payment', async (req, res) => {
           createdAt: new Date().toISOString()
         }, { merge: true });
       } catch (dbErr) {
-        console.error('Error updating order in Firestore:', dbErr);
+        console.error('Error updating order in store:', dbErr);
       }
     }
 
@@ -456,10 +525,6 @@ app.post('/api/settings/keys', async (req, res) => {
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'healthy', project: 'PDF Master India', time: new Date().toISOString() });
 });
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const distPath = path.resolve(__dirname, 'dist');
 
 // Serve frontend with Vite middlewares in development, or static dist in production
 const isProduction = process.env.NODE_ENV === 'production';
