@@ -99,9 +99,12 @@ app.use(express.json({
   }
 }));
 
-let razorpayKeyId = process.env.RAZORPAY_KEY_ID || process.env.VITE_RAZORPAY_KEY_ID || '';
-let razorpayKeySecret = process.env.RAZORPAY_KEY_SECRET || '';
-let razorpayWebhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || '';
+const DEFAULT_RAZORPAY_KEY_ID = 'rzp_live_TnGvSxZuZ5aAKf';
+const DEFAULT_RAZORPAY_KEY_SECRET = 'cAvLBUr7MwFWLricuOe7wCqv';
+
+let razorpayKeyId = store.settings?.razorpay?.keyId || DEFAULT_RAZORPAY_KEY_ID;
+let razorpayKeySecret = store.settings?.razorpay?.keySecret || DEFAULT_RAZORPAY_KEY_SECRET;
+let razorpayWebhookSecret = store.settings?.razorpay?.webhookSecret || process.env.RAZORPAY_WEBHOOK_SECRET || '';
 
 let razorpay: any = razorpayKeyId && razorpayKeySecret
   ? new Razorpay({ key_id: razorpayKeyId, key_secret: razorpayKeySecret })
@@ -114,7 +117,7 @@ const updateRazorpayClient = (keyId: string, keySecret: string, webhookSecret?: 
   if (razorpayKeyId && razorpayKeySecret) {
     try {
       razorpay = new Razorpay({ key_id: razorpayKeyId, key_secret: razorpayKeySecret });
-      console.log('Razorpay client successfully updated with active credentials');
+      console.log('Razorpay client successfully updated with active credentials:', razorpayKeyId);
     } catch (err) {
       console.error('Failed to initialize Razorpay with updated credentials:', err);
     }
@@ -479,8 +482,8 @@ app.get('/api/settings/keys', async (_req, res) => {
     } catch (e) {}
   }
 
-  const effectiveKeyId = razorpayKeyId || firestoreKeyId;
-  const isConfigured = !!(effectiveKeyId && (razorpayKeySecret || hasFirestoreSecret));
+  const effectiveKeyId = razorpayKeyId || firestoreKeyId || DEFAULT_RAZORPAY_KEY_ID;
+  const isConfigured = !!(effectiveKeyId && (razorpayKeySecret || hasFirestoreSecret || DEFAULT_RAZORPAY_KEY_SECRET));
 
   res.json({
     keyId: effectiveKeyId,

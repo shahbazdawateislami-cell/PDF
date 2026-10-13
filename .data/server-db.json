@@ -1,5 +1,12 @@
 {
-  "settings": {},
+  "settings": {
+    "razorpay": {
+      "keyId": "rzp_live_TnGvSxZuZ5aAKf",
+      "keySecret": "cAvLBUr7MwFWLricuOe7wCqv",
+      "webhookSecret": "",
+      "updatedAt": "2026-10-13T05:13:00.000Z"
+    }
+  },
   "orders": {
     "order_TnGoTOKzUYAnOP": {
       "id": "order_TnGoTOKzUYAnOP",
@@ -9,6 +16,24 @@
       "currency": "INR",
       "status": "pending",
       "createdAt": "2026-10-13T05:03:07.832Z"
+    },
+    "order_TnGr3e2IsMdH8g": {
+      "id": "order_TnGr3e2IsMdH8g",
+      "productId": "bundle-islamic-family-pack",
+      "customerId": "customer@pdfmaster.in",
+      "amount": 99,
+      "currency": "INR",
+      "status": "pending",
+      "createdAt": "2026-10-13T05:05:34.643Z"
+    },
+    "order_TnH07zXWZTiY7r": {
+      "id": "order_TnH07zXWZTiY7r",
+      "productId": "chatgpt-ai-tools-master-guide",
+      "customerId": "customer@pdfmaster.in",
+      "amount": 99,
+      "currency": "INR",
+      "status": "pending",
+      "createdAt": "2026-10-13T05:14:09.830Z"
     }
   },
   "payments": {},

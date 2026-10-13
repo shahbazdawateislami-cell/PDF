@@ -144,16 +144,23 @@ export default function Checkout() {
       }
 
       // 2. Fetch active Razorpay Key
-      let activeRazorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID || '';
+      let activeRazorpayKey = '';
       try {
         const keysRes = await fetch('/api/settings/keys');
         if (keysRes.ok) {
           const keysData = await keysRes.json();
-          if (keysData?.keyId) {
+          if (keysData?.keyId && keysData.keyId.startsWith('rzp_')) {
             activeRazorpayKey = keysData.keyId;
           }
         }
       } catch (e) {}
+
+      if (!activeRazorpayKey && typeof import.meta.env.VITE_RAZORPAY_KEY_ID === 'string' && import.meta.env.VITE_RAZORPAY_KEY_ID.startsWith('rzp_')) {
+        activeRazorpayKey = import.meta.env.VITE_RAZORPAY_KEY_ID;
+      }
+      if (!activeRazorpayKey) {
+        activeRazorpayKey = 'rzp_live_TnGvSxZuZ5aAKf';
+      }
 
       if (!activeRazorpayKey) {
         setErrorMessage('⚠️ Razorpay Key ID configure nahi hai! Kripya Admin Panel me API Key daalein.');
