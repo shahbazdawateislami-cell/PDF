@@ -22,7 +22,9 @@ import {
   Plus,
   Check,
   Link2,
-  Copy
+  Copy,
+  ChevronLeft,
+  ChevronRight
 } from 'lucide-react';
 import { Navbar } from '../components/Navbar';
 import { Footer } from '../components/Footer';
@@ -41,6 +43,14 @@ export default function Home() {
   const [newsletterSubscribed, setNewsletterSubscribed] = useState(false);
   const [previewModalProduct, setPreviewModalProduct] = useState<Product | null>(null);
   const [catalogCategory, setCatalogCategory] = useState<string>('all');
+  const categoriesContainerRef = React.useRef<HTMLDivElement>(null);
+
+  const scrollCategories = (direction: 'left' | 'right') => {
+    if (categoriesContainerRef.current) {
+      const scrollAmount = direction === 'left' ? -240 : 240;
+      categoriesContainerRef.current.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+    }
+  };
 
   // Marketing: Live Social Proof Toast
   const [showProof, setShowProof] = useState(false);
@@ -300,33 +310,64 @@ export default function Home() {
           </div>
         </section>
 
-        {/* POPULAR CATEGORIES */}
-        <section className="bg-white rounded-2xl p-4 sm:p-6 border border-gray-200/80 shadow-xs">
-          <div className="flex justify-between items-center mb-5">
-            <div>
-              <h2 className="text-xl md:text-2xl font-black text-gray-900 tracking-tight">
+        {/* POPULAR CATEGORIES (Compressed Surface Area & Horizontal Scroll) */}
+        <section className="bg-white rounded-2xl p-3.5 sm:p-5 border border-gray-200/80 shadow-xs relative">
+          <div className="flex justify-between items-center mb-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-base sm:text-lg md:text-xl font-black text-gray-900 tracking-tight">
                 Popular Categories
               </h2>
+              <span className="hidden sm:inline-flex text-[10px] font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full items-center gap-1">
+                ← Scroll to explore →
+              </span>
             </div>
-            <Link
-              to="/all"
-              className="text-xs md:text-sm font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1 group"
-            >
-              View All <ArrowRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
-            </Link>
+
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {/* Left & Right Smooth Scroll Buttons */}
+              <button
+                type="button"
+                onClick={() => scrollCategories('left')}
+                aria-label="Scroll left"
+                className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition-all active:scale-90 border border-gray-200/80 cursor-pointer"
+                title="Scroll left"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <button
+                type="button"
+                onClick={() => scrollCategories('right')}
+                aria-label="Scroll right"
+                className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 text-gray-700 flex items-center justify-center transition-all active:scale-90 border border-gray-200/80 cursor-pointer"
+                title="Scroll right"
+              >
+                <ChevronRight size={15} />
+              </button>
+
+              <Link
+                to="/all"
+                className="text-xs md:text-sm font-bold text-blue-600 hover:text-blue-700 flex items-center gap-0.5 group ml-1"
+              >
+                View All <ArrowRight size={13} className="group-hover:translate-x-0.5 transition-transform" />
+              </Link>
+            </div>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 lg:grid-cols-10 gap-2.5 sm:gap-3">
+          {/* Horizontally scrollable row showing ~2.5 to 3 items per view */}
+          <div
+            ref={categoriesContainerRef}
+            className="flex items-center gap-2.5 sm:gap-3 overflow-x-auto scroll-smooth snap-x snap-mandatory py-1 pb-1.5 scrollbar-none [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             {categories.map((cat) => (
               <button
                 key={cat.id}
+                type="button"
                 onClick={() => navigate(`/all?cat=${encodeURIComponent(cat.name)}`)}
-                className="group flex flex-col items-center justify-center p-3 rounded-xl bg-gray-50/70 hover:bg-orange-50/60 border border-gray-200/60 hover:border-orange-300 transition-all text-center"
+                className="group flex flex-col items-center justify-center py-2.5 px-2 rounded-xl bg-gray-50/80 hover:bg-orange-50/70 border border-gray-200/70 hover:border-orange-300 transition-all text-center flex-shrink-0 snap-start w-[31%] min-w-[96px] max-w-[115px] sm:w-28 active:scale-95 cursor-pointer shadow-2xs hover:shadow-xs"
               >
                 <span className="text-2xl sm:text-3xl mb-1.5 group-hover:scale-110 transition-transform">
                   {cat.icon}
                 </span>
-                <span className="text-[11px] font-bold text-gray-800 group-hover:text-orange-600 transition-colors leading-tight line-clamp-1">
+                <span className="text-[11px] font-bold text-gray-800 group-hover:text-orange-600 transition-colors leading-tight line-clamp-1 w-full truncate px-1">
                   {cat.name}
                 </span>
               </button>

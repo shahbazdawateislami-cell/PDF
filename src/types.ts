@@ -97,7 +97,12 @@ export interface Bundle {
 export interface Coupon {
   id?: string;
   code: string;
-  discountPercent: number;
+  discountPercent?: number; // percentage value e.g. 10 for 10%
+  discountType?: 'percentage' | 'flat'; // percentage or flat INR discount
+  discountAmount?: number; // flat discount amount in INR e.g. 50
+  minOrderAmount?: number; // minimum order requirement in INR
+  expiryDate?: string; // ISO date string or YYYY-MM-DD
+  timesUsed?: number;
   description: string;
   isActive?: boolean;
   createdAt?: string;

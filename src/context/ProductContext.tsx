@@ -36,9 +36,63 @@ export const DEFAULT_HERO_CONFIG: HeroBannerConfig = {
 };
 
 export const INITIAL_COUPONS: Coupon[] = [
-  { id: 'cpn-1', code: 'MASTER10', discountPercent: 10, description: '10% OFF on all PDF Guides & Bundles', isActive: true, createdAt: new Date().toISOString() },
-  { id: 'cpn-2', code: 'FIRST50', discountPercent: 50, description: 'Special 50% Welcome Discount', isActive: true, createdAt: new Date().toISOString() },
-  { id: 'cpn-3', code: 'WELCOME20', discountPercent: 20, description: '20% OFF Special Promo Code', isActive: true, createdAt: new Date().toISOString() }
+  { 
+    id: 'cpn-1', 
+    code: 'MASTER10', 
+    discountType: 'percentage',
+    discountPercent: 10, 
+    minOrderAmount: 0,
+    description: '10% OFF on all PDF Guides & Combos', 
+    isActive: true, 
+    timesUsed: 142,
+    createdAt: new Date().toISOString() 
+  },
+  { 
+    id: 'cpn-2', 
+    code: 'FIRST50', 
+    discountType: 'percentage',
+    discountPercent: 50, 
+    minOrderAmount: 99,
+    description: 'Special 50% Welcome Discount (Min ₹99)', 
+    isActive: true, 
+    timesUsed: 89,
+    createdAt: new Date().toISOString() 
+  },
+  { 
+    id: 'cpn-3', 
+    code: 'WELCOME20', 
+    discountType: 'percentage',
+    discountPercent: 20, 
+    minOrderAmount: 0,
+    description: '20% OFF Special Promo Code', 
+    isActive: true, 
+    timesUsed: 64,
+    createdAt: new Date().toISOString() 
+  },
+  { 
+    id: 'cpn-4', 
+    code: 'FLAT50', 
+    discountType: 'flat',
+    discountPercent: 0,
+    discountAmount: 50, 
+    minOrderAmount: 99,
+    description: 'Flat ₹50 Instant Savings (Min ₹99)', 
+    isActive: true, 
+    timesUsed: 31,
+    createdAt: new Date().toISOString() 
+  },
+  { 
+    id: 'cpn-5', 
+    code: 'MEGA100', 
+    discountType: 'flat',
+    discountPercent: 0,
+    discountAmount: 100, 
+    minOrderAmount: 199,
+    description: 'Flat ₹100 Mega Discount on Orders ₹199+', 
+    isActive: true, 
+    timesUsed: 19,
+    createdAt: new Date().toISOString() 
+  }
 ];
 
 interface ProductContextType {
@@ -59,8 +113,10 @@ interface ProductContextType {
   updateBundle: (id: string, updated: Partial<Bundle>) => Promise<void>;
   deleteBundle: (id: string) => Promise<void>;
   addCoupon: (coupon: Omit<Coupon, 'id'>) => Promise<string>;
+  bulkAddCoupons: (coupons: Omit<Coupon, 'id'>[]) => Promise<void>;
   updateCoupon: (id: string, updated: Partial<Coupon>) => Promise<void>;
   deleteCoupon: (id: string) => Promise<void>;
+  resetCouponsToDefaults: () => Promise<void>;
   validateCoupon: (code: string) => Coupon | null;
   addToCart: (product: Product) => void;
   removeFromCart: (productId: string) => void;
@@ -357,6 +413,25 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
             setHeroConfig((prev) => ({ ...prev, ...remoteHero }));
           }
         }
+
+        // 3. Sync coupons from Firestore
+        try {
+          const couponSnap = await getDocs(collection(db, 'coupons'));
+          if (!couponSnap.empty) {
+            const dbCoupons: Coupon[] = [];
+            couponSnap.forEach((d) => dbCoupons.push(d.data() as Coupon));
+            if (dbCoupons.length > 0) {
+              setCoupons((prev) => {
+                const map = new Map<string, Coupon>();
+                prev.forEach((c) => map.set(c.id || c.code, c));
+                dbCoupons.forEach((c) => map.set(c.id || c.code, c));
+                return Array.from(map.values());
+              });
+            }
+          }
+        } catch (e) {
+          // Fallback to local
+        }
       } catch (err) {
         // Fallback to local
       }
@@ -504,6 +579,32 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  const bulkAddCoupons = async (newCouponsData: Omit<Coupon, 'id'>[]): Promise<void> => {
+    const createdList: Coupon[] = newCouponsData.map((c, idx) => ({
+      ...c,
+      id: `cpn-${Date.now()}-${idx}`,
+      code: c.code.trim().toUpperCase(),
+      createdAt: new Date().toISOString(),
+      timesUsed: c.timesUsed || 0,
+      isActive: c.isActive !== false
+    }));
+    setCoupons((prev) => [...createdList, ...prev]);
+    for (const c of createdList) {
+      try {
+        await setDoc(doc(db, 'coupons', c.id!), c);
+      } catch (e) {
+        console.warn('Firestore bulk coupon failed, saved locally:', e);
+      }
+    }
+  };
+
+  const resetCouponsToDefaults = async (): Promise<void> => {
+    setCoupons(INITIAL_COUPONS);
+    try {
+      localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(INITIAL_COUPONS));
+    } catch {}
+  };
+
   const validateCoupon = (code: string): Coupon | null => {
     const clean = code.trim().toUpperCase();
     const matched = coupons.find((c) => c.code === clean && c.isActive);
@@ -633,8 +734,10 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         updateBundle,
         deleteBundle,
         addCoupon,
+        bulkAddCoupons,
         updateCoupon,
         deleteCoupon,
+        resetCouponsToDefaults,
         validateCoupon,
         addToCart,
         removeFromCart,

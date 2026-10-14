@@ -35,11 +35,15 @@ import {
   Copy,
   Share2,
   CheckCheck,
-  KeyRound
+  KeyRound,
+  Tag,
+  Percent,
+  Ticket,
+  Coins
 } from 'lucide-react';
 import { useProducts } from '../context/ProductContext';
 import { useAuth } from '../context/AuthContext';
-import { Product, Bundle, HeroStackedCard, HeroBannerConfig } from '../types';
+import { Product, Bundle, HeroStackedCard, HeroBannerConfig, Coupon } from '../types';
 import { createBookCoverSvg, createSamplePageSvg } from '../data/coverImages';
 
 export default function Admin() {
@@ -55,6 +59,12 @@ export default function Admin() {
     addBundle,
     updateBundle,
     deleteBundle,
+    coupons,
+    addCoupon,
+    bulkAddCoupons,
+    updateCoupon,
+    deleteCoupon,
+    resetCouponsToDefaults,
     orders, 
     downloadLogs, 
     categories,
@@ -81,8 +91,8 @@ export default function Admin() {
   };
 
   const requestedTab = searchParams.get('tab');
-  const [activeTab, setActiveTab] = useState<'products' | 'bundles' | 'orders' | 'logs' | 'hero' | 'api-keys'>(
-    requestedTab === 'hero' ? 'hero' : requestedTab === 'api-keys' ? 'api-keys' : 'products'
+  const [activeTab, setActiveTab] = useState<'products' | 'bundles' | 'orders' | 'logs' | 'coupons' | 'hero' | 'api-keys'>(
+    requestedTab === 'hero' ? 'hero' : requestedTab === 'api-keys' ? 'api-keys' : requestedTab === 'coupons' ? 'coupons' : 'products'
   );
 
   // Hero Banner Customization state
@@ -342,6 +352,135 @@ export default function Admin() {
     } finally {
       setIsSavingKeys(false);
     }
+  };
+
+  // ==========================================
+  // COUPONS MANAGEMENT STATE & ACTIONS
+  // ==========================================
+  const [couponSearch, setCouponSearch] = useState('');
+  const [couponFilterType, setCouponFilterType] = useState<'all' | 'percentage' | 'flat'>('all');
+  const [couponFilterStatus, setCouponFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
+  
+  // Single Coupon Modal
+  const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
+  const [editingCoupon, setEditingCoupon] = useState<Coupon | null>(null);
+  const [formCouponCode, setFormCouponCode] = useState('');
+  const [formCouponType, setFormCouponType] = useState<'percentage' | 'flat'>('percentage');
+  const [formCouponValue, setFormCouponValue] = useState<number>(20);
+  const [formCouponMinOrder, setFormCouponMinOrder] = useState<number>(0);
+  const [formCouponExpiry, setFormCouponExpiry] = useState<string>('');
+  const [formCouponDesc, setFormCouponDesc] = useState('');
+  const [formCouponActive, setFormCouponActive] = useState<boolean>(true);
+
+  // Bulk Add Coupons Modal
+  const [isBulkCouponModalOpen, setIsBulkCouponModalOpen] = useState(false);
+  const [bulkCouponsList, setBulkCouponsList] = useState<Array<{
+    code: string;
+    discountType: 'percentage' | 'flat';
+    value: number;
+    minOrder: number;
+    description: string;
+  }>>([
+    { code: 'MASTER10', discountType: 'percentage', value: 10, minOrder: 0, description: '10% Sitewide Discount on All Guides' },
+    { code: 'FIRST50', discountType: 'percentage', value: 50, minOrder: 99, description: '50% First Order Welcome Offer (Min ₹99)' },
+    { code: 'FLAT50', discountType: 'flat', value: 50, minOrder: 99, description: 'Flat ₹50 Instant Rupee Savings' },
+    { code: 'MEGA100', discountType: 'flat', value: 100, minOrder: 199, description: 'Flat ₹100 Mega Discount (Orders ₹199+)' },
+    { code: 'FESTIVE25', discountType: 'percentage', value: 25, minOrder: 0, description: 'Festive Flash Sale 25% Off' }
+  ]);
+
+  // Delete Coupon Target
+  const [couponDeleteConfirmTarget, setCouponDeleteConfirmTarget] = useState<Coupon | null>(null);
+
+  const handleOpenAddCoupon = () => {
+    setEditingCoupon(null);
+    setFormCouponCode('');
+    setFormCouponType('percentage');
+    setFormCouponValue(20);
+    setFormCouponMinOrder(0);
+    setFormCouponExpiry('');
+    setFormCouponDesc('');
+    setFormCouponActive(true);
+    setIsCouponModalOpen(true);
+  };
+
+  const handleOpenEditCoupon = (coupon: Coupon) => {
+    setEditingCoupon(coupon);
+    setFormCouponCode(coupon.code);
+    setFormCouponType(coupon.discountType || (coupon.discountAmount ? 'flat' : 'percentage'));
+    setFormCouponValue(coupon.discountType === 'flat' ? (coupon.discountAmount || 50) : (coupon.discountPercent || 10));
+    setFormCouponMinOrder(coupon.minOrderAmount || 0);
+    setFormCouponExpiry(coupon.expiryDate || '');
+    setFormCouponDesc(coupon.description || '');
+    setFormCouponActive(coupon.isActive !== false);
+    setIsCouponModalOpen(true);
+  };
+
+  const handleSaveCoupon = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanCode = formCouponCode.trim().toUpperCase();
+    if (!cleanCode) {
+      showNotify('⚠️ Kripya Coupon Code enter karein (e.g. MASTER10 ya FLAT50)');
+      return;
+    }
+    if (formCouponValue <= 0) {
+      showNotify('⚠️ Discount value 0 se zyada honi chahiye');
+      return;
+    }
+
+    const payload: Omit<Coupon, 'id'> = {
+      code: cleanCode,
+      discountType: formCouponType,
+      discountPercent: formCouponType === 'percentage' ? Number(formCouponValue) : 0,
+      discountAmount: formCouponType === 'flat' ? Number(formCouponValue) : 0,
+      minOrderAmount: Number(formCouponMinOrder) || 0,
+      expiryDate: formCouponExpiry || undefined,
+      description: formCouponDesc.trim() || `${formCouponType === 'flat' ? `Flat ₹${formCouponValue} OFF` : `${formCouponValue}% OFF`} on checkout`,
+      isActive: formCouponActive
+    };
+
+    if (editingCoupon && editingCoupon.id) {
+      await updateCoupon(editingCoupon.id, payload);
+      showNotify(`✓ Coupon "${cleanCode}" successfully update ho gaya!`);
+    } else {
+      await addCoupon(payload);
+      showNotify(`✓ Naya Coupon "${cleanCode}" successfully add aur checkout payment se connect ho gaya!`);
+    }
+    setIsCouponModalOpen(false);
+  };
+
+  const handleToggleCouponActive = async (coupon: Coupon) => {
+    if (!coupon.id) return;
+    const newStatus = !(coupon.isActive !== false);
+    await updateCoupon(coupon.id, { isActive: newStatus });
+    showNotify(newStatus ? `✓ Coupon "${coupon.code}" active ho gaya!` : `⚠️ Coupon "${coupon.code}" deactivate ho gaya.`);
+  };
+
+  const handleConfirmDeleteCoupon = async () => {
+    if (!couponDeleteConfirmTarget?.id) return;
+    await deleteCoupon(couponDeleteConfirmTarget.id);
+    showNotify(`✓ Coupon "${couponDeleteConfirmTarget.code}" successfully delete ho gaya.`);
+    setCouponDeleteConfirmTarget(null);
+  };
+
+  const handleBulkAdd5Coupons = async () => {
+    const couponsToAdd: Omit<Coupon, 'id'>[] = bulkCouponsList.map((item) => ({
+      code: item.code.trim().toUpperCase(),
+      discountType: item.discountType,
+      discountPercent: item.discountType === 'percentage' ? Number(item.value) : 0,
+      discountAmount: item.discountType === 'flat' ? Number(item.value) : 0,
+      minOrderAmount: Number(item.minOrder) || 0,
+      description: item.description,
+      isActive: true,
+      timesUsed: 0
+    }));
+    await bulkAddCoupons(couponsToAdd);
+    showNotify('✓ 5 Alag-alag Coupon Codes ek sath successfully add aur checkout se connect ho gaye!');
+    setIsBulkCouponModalOpen(false);
+  };
+
+  const handleResetCoupons = async () => {
+    await resetCouponsToDefaults();
+    showNotify('✓ Saare default coupons reset aur restore ho gaye!');
   };
 
   // Robust, native file upload helper (zero FileReader errors, supports any file size)
@@ -1213,6 +1352,17 @@ export default function Admin() {
             Download Activity Logs ({downloadLogs.length})
           </button>
           <button
+            onClick={() => setActiveTab('coupons')}
+            className={`px-4 py-2 rounded-xl text-xs font-black transition-all whitespace-nowrap flex items-center gap-1.5 shadow-xs ${
+              activeTab === 'coupons'
+                ? 'bg-purple-600 text-white ring-2 ring-purple-400/50 shadow-sm'
+                : 'bg-white text-purple-700 hover:bg-purple-50 border border-purple-200'
+            }`}
+          >
+            <Tag size={14} className={activeTab === 'coupons' ? 'text-white' : 'text-purple-600'} />
+            🎟️ Discount Coupons ({coupons.length})
+          </button>
+          <button
             onClick={() => setActiveTab('hero')}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap flex items-center gap-1.5 ${
               activeTab === 'hero'
@@ -1706,6 +1856,289 @@ export default function Admin() {
                   ))}
                 </tbody>
               </table>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: DISCOUNT COUPONS & PROMO CODES */}
+        {activeTab === 'coupons' && (
+          <div className="space-y-6 animate-fade-in">
+            {/* Top Toolbar Card */}
+            <div className="bg-white rounded-2xl p-5 border border-gray-200/80 shadow-xs flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-xl bg-purple-100 text-purple-700 flex items-center justify-center font-bold shadow-2xs">
+                    <Tag size={20} />
+                  </div>
+                  <div>
+                    <h2 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                      🎟️ Discount Coupons &amp; Promo Codes Manager
+                    </h2>
+                    <p className="text-xs text-gray-500 mt-0.5 max-w-2xl leading-relaxed">
+                      Percentage (% OFF) ya Flat Rupee (₹ OFF) discount coupon codes banayein jo seedha checkout aur payment page ke coupon box se connect hain.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center gap-2 flex-wrap w-full md:w-auto">
+                <button
+                  type="button"
+                  onClick={handleOpenAddCoupon}
+                  className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 active:scale-95 text-white font-black text-xs shadow-sm hover:shadow transition-all flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus size={16} /> Naya Coupon Banayein
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setIsBulkCouponModalOpen(true)}
+                  className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 active:scale-95 text-white font-black text-xs shadow-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Zap size={15} /> ⚡ Ek Sath 5 Coupons Add Karein
+                </button>
+                <button
+                  type="button"
+                  onClick={handleResetCoupons}
+                  className="px-3.5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                  title="Default 5 coupons restore karein"
+                >
+                  <RotateCcw size={14} /> Reset Defaults
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Stats Overview */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+              <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-2xs">
+                <div className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">Total Coupons</div>
+                <div className="text-2xl font-black text-gray-900 mt-1">{coupons.length}</div>
+                <div className="text-[10px] text-gray-400 mt-0.5">Website par registered</div>
+              </div>
+              <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-2xs">
+                <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
+                  <Check size={12} /> Active Coupons
+                </div>
+                <div className="text-2xl font-black text-emerald-700 mt-1">
+                  {coupons.filter(c => c.isActive !== false).length}
+                </div>
+                <div className="text-[10px] text-gray-400 mt-0.5">Checkout par chal rahe hain</div>
+              </div>
+              <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-2xs">
+                <div className="text-[11px] font-bold text-purple-600 uppercase tracking-wider flex items-center gap-1">
+                  <Percent size={12} /> Percentage (%) Deals
+                </div>
+                <div className="text-2xl font-black text-purple-700 mt-1">
+                  {coupons.filter(c => (c.discountType || 'percentage') === 'percentage').length}
+                </div>
+                <div className="text-[10px] text-gray-400 mt-0.5">10%, 20%, 50% jaise offers</div>
+              </div>
+              <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-2xs">
+                <div className="text-[11px] font-bold text-amber-600 uppercase tracking-wider flex items-center gap-1">
+                  <Coins size={12} /> Flat (₹) Discounts
+                </div>
+                <div className="text-2xl font-black text-amber-700 mt-1">
+                  {coupons.filter(c => c.discountType === 'flat').length}
+                </div>
+                <div className="text-[10px] text-gray-400 mt-0.5">Flat ₹50, ₹100 direct chhut</div>
+              </div>
+            </div>
+
+            {/* Filter and Search Bar */}
+            <div className="bg-white p-4 rounded-2xl border border-gray-200/80 shadow-2xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              <div className="relative flex-1">
+                <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  value={couponSearch}
+                  onChange={(e) => setCouponSearch(e.target.value)}
+                  placeholder="Coupon code ya description search karein (e.g. MASTER10, FLAT50)..."
+                  className="w-full pl-9 pr-4 py-2 text-xs border border-gray-200 rounded-xl outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-200"
+                />
+              </div>
+
+              <div className="flex items-center gap-2 flex-wrap">
+                {/* Type Filter */}
+                <select
+                  value={couponFilterType}
+                  onChange={(e) => setCouponFilterType(e.target.value as any)}
+                  className="px-3 py-2 text-xs border border-gray-200 rounded-xl bg-gray-50 font-bold text-gray-700 outline-none cursor-pointer"
+                >
+                  <option value="all">Sabhi Types (% &amp; ₹)</option>
+                  <option value="percentage">Sirf Percentage (%) Offers</option>
+                  <option value="flat">Sirf Flat Cash (₹) Offers</option>
+                </select>
+
+                {/* Status Filter */}
+                <select
+                  value={couponFilterStatus}
+                  onChange={(e) => setCouponFilterStatus(e.target.value as any)}
+                  className="px-3 py-2 text-xs border border-gray-200 rounded-xl bg-gray-50 font-bold text-gray-700 outline-none cursor-pointer"
+                >
+                  <option value="all">Sabhi Status (Active &amp; Inactive)</option>
+                  <option value="active">Sirf Active Coupons</option>
+                  <option value="inactive">Sirf Inactive Coupons</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Coupons Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {coupons
+                .filter((c) => {
+                  if (couponSearch) {
+                    const q = couponSearch.toLowerCase();
+                    const matchCode = c.code.toLowerCase().includes(q);
+                    const matchDesc = c.description?.toLowerCase().includes(q);
+                    if (!matchCode && !matchDesc) return false;
+                  }
+                  if (couponFilterType === 'percentage') {
+                    if (c.discountType === 'flat') return false;
+                  } else if (couponFilterType === 'flat') {
+                    if (c.discountType !== 'flat') return false;
+                  }
+                  if (couponFilterStatus === 'active') {
+                    if (c.isActive === false) return false;
+                  } else if (couponFilterStatus === 'inactive') {
+                    if (c.isActive !== false) return false;
+                  }
+                  return true;
+                })
+                .map((coupon) => {
+                  const isFlat = coupon.discountType === 'flat';
+                  const isActive = coupon.isActive !== false;
+                  return (
+                    <div
+                      key={coupon.id || coupon.code}
+                      className={`bg-white rounded-2xl border transition-all relative overflow-hidden flex flex-col justify-between ${
+                        isActive
+                          ? 'border-gray-200/90 shadow-xs hover:shadow-md'
+                          : 'border-gray-200/60 opacity-60 bg-gray-50/50'
+                      }`}
+                    >
+                      {/* Top decorative coupon ticket header */}
+                      <div className={`p-4 border-b flex items-center justify-between ${
+                        isFlat ? 'bg-amber-50/60 border-amber-100' : 'bg-purple-50/60 border-purple-100'
+                      }`}>
+                        <div className="flex items-center gap-2">
+                          <div className={`font-mono text-base font-black px-3 py-1 rounded-xl tracking-wider select-all ${
+                            isFlat
+                              ? 'bg-amber-600 text-white shadow-2xs'
+                              : 'bg-purple-700 text-white shadow-2xs'
+                          }`}>
+                            {coupon.code}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyText(coupon.code, coupon.code, `Coupon Code "${coupon.code}"`)}
+                            className="p-1.5 rounded-lg bg-white/80 hover:bg-white text-gray-700 border border-gray-200 text-[11px] font-bold transition-all active:scale-95 cursor-pointer shadow-2xs flex items-center gap-1"
+                            title="Code copy karein"
+                          >
+                            <Copy size={13} />
+                          </button>
+                        </div>
+
+                        {/* Status Toggle Badge */}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleCouponActive(coupon)}
+                          className={`text-[10px] font-black px-2.5 py-1 rounded-full border transition-all flex items-center gap-1 cursor-pointer ${
+                            isActive
+                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300 hover:bg-emerald-200'
+                              : 'bg-gray-200 text-gray-600 border-gray-300 hover:bg-gray-300'
+                          }`}
+                        >
+                          <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-600 animate-pulse' : 'bg-gray-400'}`} />
+                          {isActive ? 'ACTIVE' : 'INACTIVE'}
+                        </button>
+                      </div>
+
+                      {/* Content Body */}
+                      <div className="p-4 space-y-3 flex-1 flex flex-col justify-between">
+                        <div>
+                          {/* Discount Badge */}
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className={`text-xs font-black px-2.5 py-1 rounded-lg flex items-center gap-1 ${
+                              isFlat
+                                ? 'bg-amber-100 text-amber-900 border border-amber-200'
+                                : 'bg-purple-100 text-purple-900 border border-purple-200'
+                            }`}>
+                              {isFlat ? (
+                                <>
+                                  <Coins size={13} className="text-amber-700" /> FLAT ₹{coupon.discountAmount || 50} OFF
+                                </>
+                              ) : (
+                                <>
+                                  <Percent size={13} className="text-purple-700" /> {coupon.discountPercent || 10}% DISCOUNT
+                                </>
+                              )}
+                            </span>
+                            {coupon.minOrderAmount && coupon.minOrderAmount > 0 ? (
+                              <span className="text-[10px] font-bold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-md">
+                                Min Cart: ₹{coupon.minOrderAmount}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md">
+                                Har Order Par Lagu
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="text-xs text-gray-700 font-medium leading-relaxed">
+                            {coupon.description || 'Applicable on checkout for instant price deduction.'}
+                          </p>
+                        </div>
+
+                        {/* Meta info tags */}
+                        <div className="pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-500 flex-wrap gap-1">
+                          <div className="flex items-center gap-1">
+                            <Clock size={12} className="text-gray-400" />
+                            <span>
+                              {coupon.expiryDate ? `Exp: ${coupon.expiryDate}` : 'No Expiry (Lifetime)'}
+                            </span>
+                          </div>
+                          <div className="text-[10px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-md">
+                            Used: {coupon.timesUsed || 0} times
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Card Footer Actions */}
+                      <div className="p-3 bg-gray-50/80 border-t border-gray-100 flex items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditCoupon(coupon)}
+                          className="flex-1 py-1.5 px-3 rounded-xl bg-white hover:bg-gray-100 border border-gray-200 text-xs font-bold text-gray-700 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                        >
+                          <Edit size={13} /> Edit
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCouponDeleteConfirmTarget(coupon)}
+                          className="py-1.5 px-3 rounded-xl bg-white hover:bg-red-50 border border-gray-200 hover:border-red-200 text-xs font-bold text-red-600 transition-colors flex items-center justify-center gap-1 cursor-pointer"
+                          title="Delete Coupon"
+                        >
+                          <Trash2 size={13} /> Delete
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+
+            {/* How It Connects to Checkout Info Note */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200/80 flex items-start gap-3">
+              <div className="w-8 h-8 rounded-xl bg-purple-600 text-white flex items-center justify-center shrink-0 font-bold text-sm shadow-2xs">
+                ✓
+              </div>
+              <div className="space-y-1 text-xs text-purple-950">
+                <div className="font-extrabold text-sm text-purple-900">
+                  Checkout &amp; Payment Page Connection Status: Active &amp; Synced
+                </div>
+                <p className="text-purple-900/80 leading-relaxed">
+                  Yahan set kiya gaya koi bhi coupon code customer ke <strong>Checkout Page (Payment Screen)</strong> ke coupon box se seedha juda hua hai. Jab bhi customer coupon code enter karke "Apply" dabayega ya "View Offers" tray me se coupon select karega, system automatically discount minus karega aur Razorpay payment total update kar dega!
+                </p>
+              </div>
             </div>
           </div>
         )}
@@ -3182,6 +3615,384 @@ export default function Admin() {
                 className="w-full sm:w-auto px-6 py-2.5 rounded-xl bg-gray-900 hover:bg-gray-800 text-white font-black text-xs transition-colors cursor-pointer"
               >
                 Close (Band Karein)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. ADD / EDIT COUPON MODAL */}
+      {isCouponModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-xs animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 sm:p-7 shadow-2xl border border-gray-100 text-left space-y-5 animate-scale-in my-8 max-h-[92vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-md">
+                  <Tag size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-gray-900 leading-tight">
+                    {editingCoupon ? 'Coupon Edit Karein' : 'Naya Coupon Banayein'}
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Website &amp; Checkout page ke liye discount offer set karein
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCouponModalOpen(false)}
+                className="p-1.5 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Live Coupon Preview Ticket */}
+            <div className="bg-gradient-to-r from-purple-50 via-indigo-50 to-purple-50 p-4 rounded-2xl border-2 border-dashed border-purple-200">
+              <div className="text-[10px] font-bold text-purple-700 uppercase tracking-wider mb-1">
+                Customer Ko Kaisa Dikhega (Live Preview):
+              </div>
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="font-mono text-base font-black text-purple-900 tracking-wider">
+                    {formCouponCode.trim() ? formCouponCode.trim().toUpperCase() : 'COUPON_CODE'}
+                  </div>
+                  <div className="text-xs text-purple-800 font-semibold mt-0.5">
+                    {formCouponType === 'flat' ? `Flat ₹${formCouponValue || 0} OFF` : `${formCouponValue || 0}% OFF`}
+                    {formCouponMinOrder > 0 ? ` • Min Order: ₹${formCouponMinOrder}` : ' • No Min Cart'}
+                  </div>
+                </div>
+                <div className="px-3 py-1 rounded-xl bg-purple-600 text-white font-black text-xs shadow-xs">
+                  {formCouponType === 'flat' ? `₹${formCouponValue || 0} OFF` : `${formCouponValue || 0}% OFF`}
+                </div>
+              </div>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleSaveCoupon} className="space-y-4">
+              {/* Coupon Code Input */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Coupon Code (e.g. MASTER10, FIRST50, FLAT100) *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formCouponCode}
+                  onChange={(e) => setFormCouponCode(e.target.value.toUpperCase())}
+                  placeholder="e.g. SPECIAL30"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 font-mono text-sm uppercase tracking-wider font-bold focus:border-purple-600 focus:ring-1 focus:ring-purple-200 outline-none"
+                />
+                <span className="text-[10px] text-gray-400 mt-0.5 block">
+                  Customer isi code ko checkout payment page par enter karega.
+                </span>
+              </div>
+
+              {/* Coupon Discount Type Toggle */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">
+                  Discount Type Chuniye *
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setFormCouponType('percentage')}
+                    className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      formCouponType === 'percentage'
+                        ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Percent size={14} /> Percentage (% Chhut)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFormCouponType('flat')}
+                    className={`p-3 rounded-xl border text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                      formCouponType === 'flat'
+                        ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                        : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'
+                    }`}
+                  >
+                    <Coins size={14} /> Flat Rupee (₹ Cash Chhut)
+                  </button>
+                </div>
+              </div>
+
+              {/* Discount Value */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  {formCouponType === 'flat' ? 'Flat Discount Amount (₹ Rupees) *' : 'Discount Percentage (% Percent) *'}
+                </label>
+                <div className="relative">
+                  <input
+                    type="number"
+                    required
+                    min={1}
+                    max={formCouponType === 'flat' ? 5000 : 100}
+                    value={formCouponValue}
+                    onChange={(e) => setFormCouponValue(Number(e.target.value))}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 font-bold text-sm focus:border-purple-600 focus:ring-1 focus:ring-purple-200 outline-none"
+                  />
+                  <span className="absolute right-3.5 top-1/2 -translate-y-1/2 font-black text-xs text-gray-500">
+                    {formCouponType === 'flat' ? '₹ Rupees' : '% Percent'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Minimum Order Value & Expiry Date */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Minimum Order Limit (₹)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={formCouponMinOrder}
+                    onChange={(e) => setFormCouponMinOrder(Number(e.target.value))}
+                    placeholder="0 = Har cart par lagu"
+                    className="w-full px-3.5 py-2 rounded-xl border border-gray-300 text-xs font-bold focus:border-purple-600 focus:ring-1 focus:ring-purple-200 outline-none"
+                  />
+                  <span className="text-[10px] text-gray-400 mt-0.5 block">0 rakhenge to bina kisi limit ke chalega</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-700 mb-1">
+                    Expiry Date (Optional)
+                  </label>
+                  <input
+                    type="date"
+                    value={formCouponExpiry}
+                    onChange={(e) => setFormCouponExpiry(e.target.value)}
+                    className="w-full px-3.5 py-2 rounded-xl border border-gray-300 text-xs font-bold focus:border-purple-600 focus:ring-1 focus:ring-purple-200 outline-none"
+                  />
+                  <span className="text-[10px] text-gray-400 mt-0.5 block">Khali chhodne par lifetime valid rahega</span>
+                </div>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  Coupon Description / Offer Note
+                </label>
+                <input
+                  type="text"
+                  value={formCouponDesc}
+                  onChange={(e) => setFormCouponDesc(e.target.value)}
+                  placeholder="e.g. Special welcome discount on all guides"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-xs focus:border-purple-600 focus:ring-1 focus:ring-purple-200 outline-none"
+                />
+              </div>
+
+              {/* Active Toggle */}
+              <div className="pt-2 flex items-center justify-between border-t border-gray-100">
+                <div>
+                  <div className="text-xs font-bold text-gray-800">Coupon Status (Active/Inactive)</div>
+                  <div className="text-[11px] text-gray-500">Active rakhne par customer ise use kar payenge</div>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={formCouponActive}
+                  onChange={(e) => setFormCouponActive(e.target.checked)}
+                  className="w-5 h-5 accent-purple-600 rounded cursor-pointer"
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-2.5 pt-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCouponModalOpen(false)}
+                  className="flex-1 py-2.5 rounded-xl border border-gray-300 text-xs font-bold text-gray-700 hover:bg-gray-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="flex-1 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-black shadow-md transition-colors cursor-pointer"
+                >
+                  {editingCoupon ? '✓ Save Changes' : '✓ Create & Connect'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 8. BULK ADD 5 COUPONS MODAL */}
+      {isBulkCouponModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-xs animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 sm:p-7 shadow-2xl border border-gray-100 text-left space-y-5 animate-scale-in my-8 max-h-[92vh] overflow-y-auto">
+            {/* Modal Header */}
+            <div className="flex items-start justify-between pb-3 border-b border-gray-100">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-amber-500 to-orange-500 text-white flex items-center justify-center shadow-md">
+                  <Zap size={20} />
+                </div>
+                <div>
+                  <h3 className="text-base sm:text-lg font-black text-gray-900 leading-tight">
+                    ⚡ Ek Sath 5 Alag-Alag Coupons Add Karein
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Aap ek click mein 5 popular coupons (Percentage aur Flat Cash deals) add aur customize kar sakte hain:
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBulkCouponModalOpen(false)}
+                className="p-1.5 rounded-xl text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors cursor-pointer"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Editable 5 Coupons List */}
+            <div className="space-y-3">
+              {bulkCouponsList.map((item, idx) => (
+                <div
+                  key={idx}
+                  className="p-3.5 bg-gray-50 rounded-2xl border border-gray-200/90 hover:border-amber-400 transition-colors space-y-2.5"
+                >
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <div className="flex items-center gap-2">
+                      <span className="w-6 h-6 rounded-full bg-amber-500 text-white font-black text-xs flex items-center justify-center">
+                        {idx + 1}
+                      </span>
+                      <input
+                        type="text"
+                        value={item.code}
+                        onChange={(e) => {
+                          const val = e.target.value.toUpperCase();
+                          setBulkCouponsList((prev) =>
+                            prev.map((c, i) => (i === idx ? { ...c, code: val } : c))
+                          );
+                        }}
+                        placeholder="COUPON_CODE"
+                        className="px-2.5 py-1.5 rounded-lg border border-gray-300 font-mono text-xs font-black uppercase tracking-wider bg-white outline-none w-32 focus:border-amber-500"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {/* Type toggle */}
+                      <select
+                        value={item.discountType}
+                        onChange={(e) => {
+                          const val = e.target.value as 'percentage' | 'flat';
+                          setBulkCouponsList((prev) =>
+                            prev.map((c, i) => (i === idx ? { ...c, discountType: val } : c))
+                          );
+                        }}
+                        className="px-2 py-1.5 rounded-lg border border-gray-300 text-xs font-bold bg-white outline-none cursor-pointer"
+                      >
+                        <option value="percentage">% Percentage</option>
+                        <option value="flat">₹ Flat Rupee</option>
+                      </select>
+
+                      {/* Value */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-[11px] font-bold text-gray-500">Value:</span>
+                        <input
+                          type="number"
+                          value={item.value}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setBulkCouponsList((prev) =>
+                              prev.map((c, i) => (i === idx ? { ...c, value: val } : c))
+                            );
+                          }}
+                          className="w-16 px-2 py-1.5 rounded-lg border border-gray-300 text-xs font-bold bg-white outline-none"
+                        />
+                        <span className="text-xs font-bold text-gray-600">
+                          {item.discountType === 'flat' ? '₹' : '%'}
+                        </span>
+                      </div>
+
+                      {/* Min Order */}
+                      <div className="flex items-center gap-1">
+                        <span className="text-[11px] font-bold text-gray-500">Min Cart:</span>
+                        <input
+                          type="number"
+                          value={item.minOrder}
+                          onChange={(e) => {
+                            const val = Number(e.target.value);
+                            setBulkCouponsList((prev) =>
+                              prev.map((c, i) => (i === idx ? { ...c, minOrder: val } : c))
+                            );
+                          }}
+                          className="w-16 px-2 py-1.5 rounded-lg border border-gray-300 text-xs font-bold bg-white outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <input
+                    type="text"
+                    value={item.description}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setBulkCouponsList((prev) =>
+                        prev.map((c, i) => (i === idx ? { ...c, description: val } : c))
+                      );
+                    }}
+                    placeholder="Coupon description..."
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-gray-200 text-xs text-gray-700 bg-white outline-none"
+                  />
+                </div>
+              ))}
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-2.5 pt-2 border-t border-gray-100">
+              <button
+                type="button"
+                onClick={() => setIsBulkCouponModalOpen(false)}
+                className="flex-1 py-2.5 rounded-xl border border-gray-300 text-xs font-bold text-gray-700 hover:bg-gray-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleBulkAdd5Coupons}
+                className="flex-1 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-black shadow-md transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <Zap size={15} /> Save &amp; Add All 5 Coupons
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9. DELETE COUPON CONFIRMATION MODAL */}
+      {couponDeleteConfirmTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 p-4 backdrop-blur-xs animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl border border-gray-100 text-center space-y-4 animate-scale-in">
+            <div className="w-12 h-12 rounded-2xl bg-red-100 text-red-600 flex items-center justify-center mx-auto shadow-sm">
+              <Trash2 size={24} />
+            </div>
+            <div>
+              <h3 className="text-base font-black text-gray-900">Coupon Delete Karein?</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Kya aap waqai coupon code <strong className="text-gray-900 font-mono font-black">{couponDeleteConfirmTarget.code}</strong> ko delete karna chahte hain? Delete karne ke baad customer iska use nahi kar payenge.
+              </p>
+            </div>
+            <div className="flex gap-2.5 pt-2">
+              <button
+                type="button"
+                onClick={() => setCouponDeleteConfirmTarget(null)}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-bold text-xs hover:bg-gray-50 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteCoupon}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-xs shadow-md transition-colors cursor-pointer"
+              >
+                Yes, Delete
               </button>
             </div>
           </div>

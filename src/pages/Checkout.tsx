@@ -21,7 +21,7 @@ import { useAuth } from '../context/AuthContext';
 export default function Checkout() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { products, bundles, addOrder } = useProducts();
+  const { products, bundles, addOrder, coupons, validateCoupon } = useProducts();
   const { user } = useAuth();
 
   // Find either matching bundle or matching single product
@@ -120,29 +120,77 @@ export default function Checkout() {
     { id: 'netbanking' as PaymentMethodType, name: 'Net Banking', tag: 'All Indian Banks', renderIcon: () => <NetBankingLogo /> },
   ];
 
-  // Coupon code state
+  // Dynamic Coupon code state connected to ProductContext
   const [couponCode, setCouponCode] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<{ code: string; discountPercent: number } | null>(null);
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    discountPercent?: number;
+    discountAmount?: number;
+    discountType?: 'percentage' | 'flat';
+    calculatedDiscount: number;
+    description?: string;
+  } | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
+  const [showAvailableCoupons, setShowAvailableCoupons] = useState(false);
 
-  const discountAmount = appliedCoupon ? Math.round((originalPrice * appliedCoupon.discountPercent) / 100) : 0;
+  const discountAmount = appliedCoupon ? appliedCoupon.calculatedDiscount : 0;
   const finalPrice = Math.max(9, originalPrice - discountAmount);
 
-  const handleApplyCoupon = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleanCode = couponCode.trim().toUpperCase();
-    if (cleanCode === 'MASTER10') {
-      setAppliedCoupon({ code: 'MASTER10', discountPercent: 10 });
-      setCouponError(null);
-    } else if (cleanCode === 'FIRST50') {
-      setAppliedCoupon({ code: 'FIRST50', discountPercent: 50 });
-      setCouponError(null);
-    } else if (cleanCode === 'WELCOME20') {
-      setAppliedCoupon({ code: 'WELCOME20', discountPercent: 20 });
-      setCouponError(null);
-    } else {
-      setCouponError('Invalid coupon code. Try MASTER10 or FIRST50.');
+  const handleApplyCoupon = (e?: React.FormEvent, customCode?: string) => {
+    if (e) e.preventDefault();
+    const cleanCode = (customCode || couponCode).trim().toUpperCase();
+    if (!cleanCode) {
+      setCouponError('Please enter a coupon code.');
+      return;
     }
+
+    const matched = coupons.find((c) => c.code.trim().toUpperCase() === cleanCode);
+    if (!matched) {
+      setCouponError(`Coupon code "${cleanCode}" is invalid. Please try another code.`);
+      return;
+    }
+
+    if (matched.isActive === false) {
+      setCouponError(`Coupon code "${cleanCode}" is currently inactive.`);
+      return;
+    }
+
+    if (matched.minOrderAmount && originalPrice < matched.minOrderAmount) {
+      setCouponError(`Coupon "${cleanCode}" is valid on orders of ₹${matched.minOrderAmount} or more. (Current price: ₹${originalPrice})`);
+      return;
+    }
+
+    if (matched.expiryDate) {
+      const exp = new Date(matched.expiryDate).getTime();
+      if (!isNaN(exp) && exp < Date.now()) {
+        setCouponError(`Coupon "${cleanCode}" has expired.`);
+        return;
+      }
+    }
+
+    let calculated = 0;
+    if (matched.discountType === 'flat' || (matched.discountAmount && (!matched.discountPercent || matched.discountPercent === 0))) {
+      calculated = Math.min(matched.discountAmount || 0, Math.max(0, originalPrice - 9));
+    } else {
+      calculated = Math.round((originalPrice * (matched.discountPercent || 0)) / 100);
+    }
+
+    setAppliedCoupon({
+      code: matched.code,
+      discountPercent: matched.discountPercent,
+      discountAmount: matched.discountAmount,
+      discountType: matched.discountType,
+      calculatedDiscount: calculated,
+      description: matched.description
+    });
+    setCouponCode(matched.code);
+    setCouponError(null);
+  };
+
+  const handleRemoveCoupon = () => {
+    setAppliedCoupon(null);
+    setCouponCode('');
+    setCouponError(null);
   };
 
   const handleCompleteOrder = async (payId: string, orderId: string) => {
@@ -564,32 +612,108 @@ export default function Checkout() {
 
             {/* Coupon Code Section */}
             <div className="pt-3 border-t border-gray-100">
-              <label className="block text-gray-700 font-bold text-xs mb-1.5 flex items-center gap-1">
-                <Tag size={13} className="text-gray-500" /> Have a Coupon Code?
-              </label>
-              <form onSubmit={handleApplyCoupon} className="flex gap-2">
-                <input
-                  type="text"
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value)}
-                  placeholder="Coupon code (e.g. MASTER10)"
-                  className="flex-1 px-3 py-2 text-xs uppercase border border-gray-300 rounded-xl outline-none font-mono focus:border-red-600 focus:ring-1 focus:ring-red-200"
-                />
-                <button
-                  type="submit"
-                  className="bg-gray-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-black transition-colors cursor-pointer"
-                >
-                  Apply
-                </button>
-              </form>
-              {appliedCoupon && (
-                <div className="text-[11px] text-emerald-600 font-bold mt-1.5 flex items-center gap-1">
-                  <Check size={12} /> Coupon {appliedCoupon.code} applied ({appliedCoupon.discountPercent}% OFF)!
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="text-gray-700 font-bold text-xs flex items-center gap-1">
+                  <Tag size={13} className="text-gray-500" /> Have a Coupon Code?
+                </label>
+                {coupons.filter(c => c.isActive !== false).length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAvailableCoupons(!showAvailableCoupons)}
+                    className="text-[11px] text-red-600 hover:text-red-700 font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                  >
+                    <span>{showAvailableCoupons ? 'Hide Offers ▲' : 'View Offers (% / ₹) ▼'}</span>
+                    <span className="bg-red-100 text-red-700 px-1.5 py-0.2 rounded-full text-[10px] font-bold">
+                      {coupons.filter(c => c.isActive !== false).length}
+                    </span>
+                  </button>
+                )}
+              </div>
+
+              {appliedCoupon ? (
+                <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black text-xs shrink-0 shadow-xs">
+                      ✓
+                    </div>
+                    <div>
+                      <div className="text-xs font-black text-emerald-900 flex items-center gap-1.5 font-mono">
+                        <span>{appliedCoupon.code}</span>
+                        <span className="bg-emerald-200 text-emerald-900 text-[10px] px-1.5 py-0.5 rounded-md font-sans font-bold">
+                          {appliedCoupon.discountType === 'flat'
+                            ? `FLAT ₹${appliedCoupon.discountAmount} OFF`
+                            : `${appliedCoupon.discountPercent}% OFF`}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-emerald-700 font-medium">
+                        You save ₹{appliedCoupon.calculatedDiscount}! {appliedCoupon.description}
+                      </div>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleRemoveCoupon}
+                    className="text-xs text-red-600 hover:text-red-700 font-bold px-2 py-1 rounded-lg hover:bg-red-50 cursor-pointer transition-colors"
+                  >
+                    Remove
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={(e) => handleApplyCoupon(e)} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value)}
+                    placeholder="Enter coupon code (e.g. MASTER10, FLAT50)"
+                    className="flex-1 px-3 py-2 text-xs uppercase border border-gray-300 rounded-xl outline-none font-mono focus:border-red-600 focus:ring-1 focus:ring-red-200 bg-white"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-gray-900 text-white text-xs font-bold px-4 py-2 rounded-xl hover:bg-black transition-colors cursor-pointer shrink-0"
+                  >
+                    Apply
+                  </button>
+                </form>
+              )}
+
+              {couponError && (
+                <div className="text-[11px] text-red-600 font-medium mt-1.5 flex items-center gap-1">
+                  <AlertCircle size={13} className="shrink-0 text-red-500" />
+                  {couponError}
                 </div>
               )}
-              {couponError && (
-                <div className="text-[11px] text-red-600 font-medium mt-1.5">
-                  {couponError}
+
+              {/* Available Coupons Drawer */}
+              {showAvailableCoupons && (
+                <div className="mt-2.5 p-2.5 bg-gray-50 border border-gray-200 rounded-xl space-y-2">
+                  <div className="text-[11px] font-bold text-gray-700 flex items-center justify-between">
+                    <span>Available Store Coupons:</span>
+                    <span className="text-[10px] text-gray-400">Click coupon to apply</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                    {coupons.filter(c => c.isActive !== false).map((c) => (
+                      <div
+                        key={c.id || c.code}
+                        onClick={() => handleApplyCoupon(undefined, c.code)}
+                        className="bg-white p-2 rounded-lg border border-dashed border-gray-300 hover:border-red-500 hover:bg-red-50/40 cursor-pointer transition-all flex items-center justify-between group shadow-2xs"
+                      >
+                        <div className="pr-1 overflow-hidden">
+                          <div className="font-mono font-black text-xs text-gray-900 group-hover:text-red-600 flex items-center gap-1">
+                            <span>{c.code}</span>
+                            <span className="text-[9px] bg-red-100 text-red-700 font-sans font-bold px-1 rounded">
+                              {c.discountType === 'flat' ? `₹${c.discountAmount} OFF` : `${c.discountPercent}% OFF`}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-gray-500 truncate max-w-[160px]">
+                            {c.description}
+                          </div>
+                        </div>
+                        <span className="text-[10px] bg-gray-100 text-gray-700 font-bold px-2 py-0.5 rounded border border-gray-200 group-hover:bg-red-600 group-hover:text-white group-hover:border-red-600 transition-colors shrink-0">
+                          Apply
+                        </span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
