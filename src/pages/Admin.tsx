@@ -268,6 +268,8 @@ export default function Admin() {
   const [uploadedPdfUrl, setUploadedPdfUrl] = useState<string | null>(null);
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
   const [uploadStatusText, setUploadStatusText] = useState('');
+  const [isUploadingPdf, setIsUploadingPdf] = useState(false);
+  const [isUploadingCover, setIsUploadingCover] = useState(false);
 
   // PDF Inside Pages & Sample Material for Horizontal Carousel
   const [formSamplePages, setFormSamplePages] = useState<string[]>([]);
@@ -483,12 +485,31 @@ export default function Admin() {
     showNotify('✓ Saare default coupons reset aur restore ho gaye!');
   };
 
-  // Robust, native file upload helper (zero FileReader errors, supports any file size)
-  const uploadFileToServer = async (file: File, productId: string, fileType: 'pdf' | 'image') => {
-    // METHOD 1: Native multipart/form-data upload via FormData (Fastest, standard, zero memory buffer)
+  // Robust, native file upload helper (zero FileReader errors, supports any file size and handles mobile OS temporary handle expirations)
+  const uploadFileToServer = async (
+    file: File | Blob,
+    productId: string,
+    fileType: 'pdf' | 'image',
+    fileNameOverride?: string
+  ): Promise<{ fileUrl: string; fileName: string; size?: number }> => {
+    const originalName = fileNameOverride || (file as File).name || (fileType === 'pdf' ? 'document.pdf' : 'image.jpg');
+
+    // 0. Snapshot the file immediately into an in-memory memoryBlob and ArrayBuffer
+    // This is critical on Android/Chrome where the OS revokes temporary content:// file handles if idle,
+    // which triggers "NotFoundError: A requested file or directory could not be found"
+    let memoryBlob: Blob = file;
+    let arrayBufferData: ArrayBuffer | null = null;
+    try {
+      arrayBufferData = await file.arrayBuffer();
+      memoryBlob = new Blob([arrayBufferData], { type: file.type || (fileType === 'pdf' ? 'application/pdf' : 'image/jpeg') });
+    } catch (readErr) {
+      console.warn('Initial arrayBuffer read notice, will use stream:', readErr);
+    }
+
+    // METHOD 1: Native multipart/form-data upload via FormData using in-memory memoryBlob
     try {
       const formData = new FormData();
-      formData.append('file', file, file.name);
+      formData.append('file', memoryBlob, originalName);
       formData.append('productId', productId);
       formData.append('fileType', fileType);
 
@@ -505,13 +526,13 @@ export default function Admin() {
       console.warn('FormData upload attempt notice, trying raw stream:', formErr);
     }
 
-    // METHOD 2: Direct raw binary stream upload (streams File Blob directly to server disk)
+    // METHOD 2: Direct raw binary stream upload
     try {
-      const query = `?fileName=${encodeURIComponent(file.name)}&productId=${encodeURIComponent(productId)}`;
+      const query = `?fileName=${encodeURIComponent(originalName)}&productId=${encodeURIComponent(productId)}`;
       const res = await fetch(`/api/upload-raw${query}`, {
         method: 'POST',
         headers: { 'Content-Type': file.type || 'application/octet-stream' },
-        body: file
+        body: arrayBufferData || memoryBlob
       });
 
       if (res.ok) {
@@ -519,13 +540,13 @@ export default function Admin() {
         if (data.fileUrl) return data;
       }
     } catch (rawErr) {
-      console.warn('Raw stream upload attempt notice, trying arrayBuffer:', rawErr);
+      console.warn('Raw stream upload attempt notice, trying arrayBuffer base64:', rawErr);
     }
 
-    // METHOD 3: ArrayBuffer upload fallback
+    // METHOD 3: ArrayBuffer / Base64 upload fallback
     try {
-      const arrayBuffer = await file.arrayBuffer();
-      const bytes = new Uint8Array(arrayBuffer);
+      const buf = arrayBufferData || (await memoryBlob.arrayBuffer());
+      const bytes = new Uint8Array(buf);
       let binary = '';
       const chunk = 8192;
       for (let i = 0; i < bytes.length; i += chunk) {
@@ -538,7 +559,7 @@ export default function Admin() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           fileData: base64Data,
-          fileName: file.name,
+          fileName: originalName,
           fileType: file.type || (fileType === 'pdf' ? 'application/pdf' : 'image/jpeg'),
           productId
         })
@@ -552,15 +573,15 @@ export default function Admin() {
       console.error('All upload pipelines failed:', fallbackErr);
     }
 
-    throw new Error(`Device se "${file.name}" upload karne mein problem aayi. Kripya dobara file select karein.`);
+    throw new Error(`Device se "${originalName}" upload karne mein problem aayi. Kripya dobara file select karein.`);
   };
 
-  // Handle Cover Image File Selection from Mobile Gallery / PC
-  const handleCoverFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Cover Image File Selection from Mobile Gallery / PC with instant upload
+  const handleCoverFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 20 * 1024 * 1024) {
-        showNotify('File size too large. Please select an image under 20MB.');
+      if (file.size > 25 * 1024 * 1024) {
+        showNotify('File size too large. Please select an image under 25MB.');
         return;
       }
       setUploadedCoverFile(file);
@@ -571,22 +592,57 @@ export default function Admin() {
       } catch (err) {
         console.warn('URL.createObjectURL notice:', err);
       }
-      showNotify(`✓ Cover photo "${file.name}" selected!`);
+
+      setIsUploadingCover(true);
+      showNotify(`⏳ Cover photo "${file.name}" select ho gayi aur upload ho rahi hai...`);
+      const targetProductId = editingProduct?.id || `cover-${Date.now()}`;
+
+      try {
+        const uploadRes = await uploadFileToServer(file, targetProductId, 'image');
+        if (uploadRes && uploadRes.fileUrl) {
+          setFormCoverImage(uploadRes.fileUrl);
+          setUploadedCoverName(uploadRes.fileName || file.name);
+          showNotify(`✓ Cover photo "${file.name}" successfully upload ho gayi!`);
+        }
+      } catch (err) {
+        console.warn('Cover immediate upload will retry during product save:', err);
+      } finally {
+        setIsUploadingCover(false);
+      }
     }
   };
 
-  // Handle PDF File Selection from Mobile / PC Storage
-  const handlePdfFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle PDF File Selection from Mobile / PC Storage with instant upload
+  const handlePdfFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (file.size > 100 * 1024 * 1024) {
-        showNotify('File size too large. Please select a PDF under 100MB.');
+      if (file.size > 150 * 1024 * 1024) {
+        showNotify('File size too large. Please select a PDF under 150MB.');
         return;
       }
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
       setUploadedPdfFile(file);
       setUploadedPdfName(file.name);
-      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-      showNotify(`✓ PDF Document "${file.name}" (${sizeMb} MB) ready for upload!`);
+      setIsUploadingPdf(true);
+      setUploadStatusText(`PDF "${file.name}" (${sizeMb} MB) upload ho raha hai...`);
+      showNotify(`⏳ PDF "${file.name}" (${sizeMb} MB) upload ho raha hai, kripya 2 second wait karein...`);
+
+      const targetProductId = editingProduct?.id || `pdf-${Date.now()}`;
+
+      try {
+        const uploadRes = await uploadFileToServer(file, targetProductId, 'pdf');
+        if (uploadRes && uploadRes.fileUrl) {
+          setUploadedPdfUrl(uploadRes.fileUrl);
+          setUploadedPdfName(uploadRes.fileName || file.name);
+          setUploadStatusText(`✓ PDF "${file.name}" successfully uploaded and saved on server!`);
+          showNotify(`✓ PDF "${file.name}" successfully uploaded and saved on server!`);
+        }
+      } catch (err: any) {
+        console.warn('Immediate PDF upload warning:', err);
+        setUploadStatusText(`File select ho gayi hai. Save product par click karke upload confirm karein.`);
+      } finally {
+        setIsUploadingPdf(false);
+      }
     }
   };
 
@@ -697,13 +753,18 @@ export default function Admin() {
     try {
       const generatedOrExistingId = editingProduct?.id || `pdf-${Date.now()}`;
 
-      // 1. Upload Cover Image if a local file was selected
+      // 1. Upload Cover Image if a local file was selected and not already uploaded to server
       let finalCoverImage = formCoverImage;
-      if (uploadedCoverFile) {
+      if (uploadedCoverFile && (!finalCoverImage || finalCoverImage.startsWith('blob:'))) {
         setUploadStatusText('Book Cover image upload ho rahi hai...');
-        const coverUploadRes = await uploadFileToServer(uploadedCoverFile, generatedOrExistingId, 'image');
-        finalCoverImage = coverUploadRes.fileUrl;
-      } else if (!finalCoverImage || finalCoverImage.startsWith('blob:')) {
+        try {
+          const coverUploadRes = await uploadFileToServer(uploadedCoverFile, generatedOrExistingId, 'image');
+          finalCoverImage = coverUploadRes.fileUrl;
+        } catch (coverErr) {
+          console.warn('Cover upload warning during save:', coverErr);
+        }
+      }
+      if (!finalCoverImage || finalCoverImage.startsWith('blob:')) {
         finalCoverImage = createBookCoverSvg(
           formTitle.slice(0, 24),
           'Practical Edition',
@@ -714,16 +775,18 @@ export default function Admin() {
         );
       }
 
-      // 2. Upload PDF Document if a local file was selected
-      let finalPdfUrl = editingProduct?.pdfUrl || uploadedPdfUrl || '';
+      // 2. Upload PDF Document: Use already-uploaded URL if ready, otherwise upload now
+      let finalPdfUrl = uploadedPdfUrl || editingProduct?.pdfUrl || '';
       let finalPdfFileName = uploadedPdfName || editingProduct?.pdfFileName || '';
       let finalFileSize = editingProduct?.fileSize || '18.4 MB';
 
-      if (uploadedPdfFile) {
+      if (!finalPdfUrl && uploadedPdfFile) {
         setUploadStatusText(`PDF Document "${uploadedPdfFile.name}" upload ho raha hai...`);
         const pdfUploadRes = await uploadFileToServer(uploadedPdfFile, generatedOrExistingId, 'pdf');
         finalPdfUrl = pdfUploadRes.fileUrl;
         finalPdfFileName = pdfUploadRes.fileName;
+      }
+      if (uploadedPdfFile) {
         const mb = (uploadedPdfFile.size / (1024 * 1024)).toFixed(1);
         finalFileSize = `${mb} MB`;
       }
@@ -2926,11 +2989,17 @@ export default function Admin() {
                       <ImageIcon size={14} className="text-orange-600" />
                       {uploadedCoverName ? 'Change Cover Photo' : 'Select Photo from Device'}
                     </button>
-                    {uploadedCoverName && (
-                      <span className="text-[11px] text-emerald-700 font-bold truncate max-w-xs">
+                    {isUploadingCover ? (
+                      <span className="text-[11px] text-amber-700 font-bold flex items-center gap-1 animate-pulse">
+                        <RefreshCw size={12} className="animate-spin text-amber-600" />
+                        Cover Uploading...
+                      </span>
+                    ) : uploadedCoverName ? (
+                      <span className="text-[11px] text-emerald-700 font-bold truncate max-w-xs flex items-center gap-1">
+                        <Check size={13} className="text-emerald-600 font-black" />
                         ✓ {uploadedCoverName}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                   {formCoverImage && (
                     <div className="mt-2 flex items-center gap-2 bg-white p-2 rounded-xl border border-gray-200 w-fit">
@@ -2955,7 +3024,7 @@ export default function Admin() {
                     onChange={handlePdfFileChange}
                     className="hidden"
                   />
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <button
                       type="button"
                       onClick={() => pdfFileInputRef.current?.click()}
@@ -2964,7 +3033,17 @@ export default function Admin() {
                       <FileCheck size={14} className="text-red-600" />
                       {uploadedPdfName ? 'Change PDF File' : 'Select .PDF File from Device'}
                     </button>
-                    {uploadedPdfName ? (
+                    {isUploadingPdf ? (
+                      <span className="text-[11px] text-amber-700 font-bold flex items-center gap-1.5 animate-pulse bg-amber-50 px-2 py-1 rounded-lg border border-amber-200">
+                        <RefreshCw size={12} className="animate-spin text-amber-600" />
+                        PDF Uploading to server...
+                      </span>
+                    ) : uploadedPdfUrl ? (
+                      <span className="text-[11px] text-emerald-700 font-black truncate max-w-xs flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
+                        <Check size={13} className="text-emerald-600" />
+                        ✓ {uploadedPdfName} (Saved on Server)
+                      </span>
+                    ) : uploadedPdfName ? (
                       <span className="text-[11px] text-emerald-700 font-bold truncate max-w-xs">
                         ✓ {uploadedPdfName} (Ready)
                       </span>
