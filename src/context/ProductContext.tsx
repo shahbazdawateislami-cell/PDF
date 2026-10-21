@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product, Order, DownloadLog, Bundle, HeroBannerConfig, HeroStackedCard, Coupon } from '../types';
 import { INITIAL_PRODUCTS, CATEGORIES_LIST, INITIAL_BUNDLES } from '../data/initialProducts';
 import { db, auth } from '../firebase';
-import { collection, getDocs, setDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
+import { collection, getDocs, setDoc, doc, deleteDoc, getDoc, onSnapshot } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
 
 export const DEFAULT_HERO_CONFIG: HeroBannerConfig = {
@@ -372,9 +372,12 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   }, [heroConfig]);
 
-  // Sync with Server and Firestore in background
+  // Real-time Bidirectional Sync with Firestore & Server
   useEffect(() => {
-    async function syncData() {
+    let unsubProducts: (() => void) | null = null;
+    let unsubCoupons: (() => void) | null = null;
+
+    async function initRealtimeSync() {
       // Ensure anonymous auth is initialized for Firestore operations
       try {
         if (!auth.currentUser) {
@@ -384,7 +387,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         console.warn('Anonymous auth sync notice:', authErr);
       }
 
-      // 1. Sync custom products from server database
+      // Initial server sync
       let serverProducts: Product[] = [];
       try {
         const res = await fetch('/api/products');
@@ -394,42 +397,66 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       } catch (err) {}
 
-      // 2. Sync with Firestore
-      let dbProducts: Product[] = [];
+      // REAL-TIME FIRESTORE LISTENER (Instant sync across AI Studio and Main Website)
       try {
-        const snap = await getDocs(collection(db, 'products'));
-        if (!snap.empty) {
-          snap.forEach((d) => dbProducts.push(d.data() as Product));
-        }
+        unsubProducts = onSnapshot(
+          collection(db, 'products'),
+          (snapshot) => {
+            const firestoreProducts: Product[] = [];
+            snapshot.forEach((d) => firestoreProducts.push(d.data() as Product));
+
+            // Firestore is the supreme cloud authority for all custom/uploaded products
+            const customMap = new Map<string, Product>();
+
+            // First add any server items
+            serverProducts.forEach((p) => customMap.set(p.id, p));
+
+            // Overwrite / add Firestore items
+            firestoreProducts.forEach((p) => customMap.set(p.id, p));
+
+            // If a custom product was deleted from Firestore and server has 0 docs,
+            // check if any document in server is absent from Firestore
+            if (firestoreProducts.length === 0) {
+              // Cloud has 0 custom products, clear custom products from local server too!
+              serverProducts.forEach((sp) => {
+                fetch(`/api/products/${sp.id}`, { method: 'DELETE' }).catch(() => {});
+              });
+              customMap.clear();
+            } else {
+              // Only keep custom products that exist in the active Firestore snapshot
+              const activeFirestoreIds = new Set(firestoreProducts.map((p) => p.id));
+              Array.from(customMap.keys()).forEach((k) => {
+                if (k.startsWith('pdf-') && !activeFirestoreIds.has(k)) {
+                  customMap.delete(k);
+                  fetch(`/api/products/${k}`, { method: 'DELETE' }).catch(() => {});
+                }
+              });
+            }
+
+            const initialIdSet = new Set(INITIAL_PRODUCTS.map((ip) => ip.id));
+            const activeCustom = Array.from(customMap.values()).filter(
+              (p) => !initialIdSet.has(p.id) || p.id.startsWith('pdf-')
+            );
+            activeCustom.sort((a, b) => {
+              const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+              const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+              return timeB - timeA;
+            });
+
+            const standard = INITIAL_PRODUCTS;
+            const combined = [...activeCustom, ...standard];
+
+            setProducts(combined);
+            try {
+              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(combined));
+            } catch {}
+          },
+          (error) => {
+            console.warn('Real-time products sync notice:', error);
+          }
+        );
       } catch (err) {
-        console.warn('Firestore fetch products notice:', err);
-      }
-
-      // Merge products with custom products ALWAYS prioritized at the top
-      if (serverProducts.length > 0 || dbProducts.length > 0) {
-        setProducts((prev) => {
-          const map = new Map<string, Product>();
-          // Base: existing / initial
-          prev.forEach((p) => map.set(p.id, p));
-          // Server items
-          serverProducts.forEach((p) => map.set(p.id, p));
-          // Firestore items (highest authority)
-          dbProducts.forEach((p) => map.set(p.id, p));
-
-          const all = Array.from(map.values());
-          const initialIdSet = new Set(INITIAL_PRODUCTS.map((ip) => ip.id));
-          const custom = all.filter((p) => !initialIdSet.has(p.id) || p.id.startsWith('pdf-'));
-          const standard = all.filter((p) => initialIdSet.has(p.id) && !p.id.startsWith('pdf-'));
-
-          // Sort custom products newest first
-          custom.sort((a, b) => {
-            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-            return timeB - timeA;
-          });
-
-          return [...custom, ...standard];
-        });
+        console.warn('Could not attach firestore products onSnapshot:', err);
       }
 
       // Sync hero banner config from Firestore
@@ -443,24 +470,33 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         }
       } catch (err) {}
 
-      // Sync coupons from Firestore
+      // REAL-TIME COUPONS LISTENER
       try {
-        const couponSnap = await getDocs(collection(db, 'coupons'));
-        if (!couponSnap.empty) {
-          const dbCoupons: Coupon[] = [];
-          couponSnap.forEach((d) => dbCoupons.push(d.data() as Coupon));
-          if (dbCoupons.length > 0) {
-            setCoupons((prev) => {
-              const map = new Map<string, Coupon>();
-              prev.forEach((c) => map.set(c.id || c.code, c));
-              dbCoupons.forEach((c) => map.set(c.id || c.code, c));
-              return Array.from(map.values());
-            });
-          }
-        }
+        unsubCoupons = onSnapshot(
+          collection(db, 'coupons'),
+          (snapshot) => {
+            if (!snapshot.empty) {
+              const dbCoupons: Coupon[] = [];
+              snapshot.forEach((d) => dbCoupons.push(d.data() as Coupon));
+              if (dbCoupons.length > 0) {
+                setCoupons(dbCoupons);
+                try {
+                  localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(dbCoupons));
+                } catch {}
+              }
+            }
+          },
+          (err) => console.warn('Coupons onSnapshot notice:', err)
+        );
       } catch (e) {}
     }
-    syncData();
+
+    initRealtimeSync();
+
+    return () => {
+      if (unsubProducts) unsubProducts();
+      if (unsubCoupons) unsubCoupons();
+    };
   }, []);
 
   const addProduct = async (data: Omit<Product, 'id'>): Promise<string> => {
