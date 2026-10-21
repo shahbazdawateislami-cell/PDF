@@ -629,13 +629,36 @@ export default function Admin() {
 
       const targetProductId = editingProduct?.id || `pdf-${Date.now()}`;
 
+      // Auto-populate Title if user has not typed one yet
+      if (!formTitle.trim()) {
+        const cleanName = file.name
+          .replace(/\.pdf$/i, '')
+          .replace(/[_-]/g, ' ')
+          .replace(/\b(apr|may|jun|jul|aug|sep|oct|nov|dec)\s+\d+.*$/i, '')
+          .trim();
+        const formattedTitle = cleanName
+          .split(' ')
+          .filter(Boolean)
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ');
+        if (formattedTitle) {
+          setFormTitle(formattedTitle);
+        }
+      }
+
+      // Auto-detect category from filename
+      const lowerName = file.name.toLowerCase();
+      if (lowerName.includes('madni') || lowerName.includes('qaeda') || lowerName.includes('islam') || lowerName.includes('quran') || lowerName.includes('deen') || lowerName.includes('hadith')) {
+        setFormCategory('Islamic Books');
+      }
+
       try {
         const uploadRes = await uploadFileToServer(file, targetProductId, 'pdf');
         if (uploadRes && uploadRes.fileUrl) {
           setUploadedPdfUrl(uploadRes.fileUrl);
           setUploadedPdfName(uploadRes.fileName || file.name);
-          setUploadStatusText(`✓ PDF "${file.name}" successfully uploaded and saved on server!`);
-          showNotify(`✓ PDF "${file.name}" successfully uploaded and saved on server!`);
+          setUploadStatusText(`✓ PDF "${file.name}" uploaded! Niche "Upload & Publish PDF" par click karke live karein.`);
+          showNotify(`✓ PDF uploaded! Live karne ke liye "Publish PDF" button dabayein.`);
         }
       } catch (err: any) {
         console.warn('Immediate PDF upload warning:', err);
@@ -3053,6 +3076,28 @@ export default function Admin() {
                       </span>
                     )}
                   </div>
+
+                  {uploadedPdfUrl && (
+                    <div className="mt-2.5 p-3 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-300 rounded-xl flex items-center justify-between gap-3 shadow-2xs">
+                      <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                          ✓
+                        </div>
+                        <div>
+                          <p className="text-xs font-black text-emerald-950">PDF File Uploaded Successfully!</p>
+                          <p className="text-[11px] text-emerald-800">Website par turant live karne ke liye "Publish PDF Now" dabayein.</p>
+                        </div>
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={isSubmittingProduct}
+                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs rounded-lg shrink-0 shadow transition-all cursor-pointer flex items-center gap-1"
+                      >
+                        <Check size={14} className="stroke-[3]" />
+                        <span>Publish Now</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 {/* 3. Inside Pages / Sample Screenshots for Horizontal Carousel */}

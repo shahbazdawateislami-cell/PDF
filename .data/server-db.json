@@ -55,7 +55,76 @@
     }
   },
   "payments": {},
-  "products": {},
+  "products": {
+    "pdf-madni-qaeda-takmili": {
+      "id": "pdf-madni-qaeda-takmili",
+      "title": "Madni Qaeda Takmili (مدنی قاعدہ تکمیلی)",
+      "category": "Islamic Books",
+      "price": 49,
+      "oldPrice": 99,
+      "rating": 4.9,
+      "reviewsCount": 42,
+      "badge": "NEW",
+      "coverImage": "/uploads/cover-1792563001403_1792563020643_Screenshot_2026-10-19-18-04-38-412.jpg",
+      "pdfUrl": "/uploads/1792563025680_madni_qaeda_takmili_Apr_29__2026_3-50_PM.pdf",
+      "pdfFileName": "madni qaeda takmili Apr 29, 2026 3-50 PM.pdf",
+      "pdfPagesCount": 64,
+      "fileSize": "116 KB",
+      "language": "Urdu + Hindi",
+      "description": "Complete Madni Qaeda Takmili digital edition. High quality readable format for easy learning, Tajweed rules and correct recitation with instant download.",
+      "highlights": [
+        "Complete Madni Qaeda Takmili edition",
+        "Clear, high-resolution readable pages",
+        "Instant PDF download with lifetime validity",
+        "Suitable for kids and beginner learners"
+      ],
+      "features": [
+        "Authentic religious study content",
+        "Crystal clear mobile-friendly PDF",
+        "Instant access link after purchase"
+      ],
+      "tableOfContents": [
+        {
+          "chapter": "Sabaq 1",
+          "title": "Huroof-e-Mufradaat & Makharij",
+          "pages": "01 - 15"
+        },
+        {
+          "chapter": "Sabaq 2",
+          "title": "Huroof-e-Murakkabaat & Harakaat",
+          "pages": "16 - 35"
+        },
+        {
+          "chapter": "Sabaq 3",
+          "title": "Tanween, Jazm & Maddat Rules",
+          "pages": "36 - 64"
+        }
+      ],
+      "previewImages": [
+        "/uploads/cover-1792563001403_1792563020643_Screenshot_2026-10-19-18-04-38-412.jpg"
+      ],
+      "samplePages": [
+        "/uploads/cover-1792563001403_1792563020643_Screenshot_2026-10-19-18-04-38-412.jpg"
+      ],
+      "videos": [],
+      "reviews": [
+        {
+          "id": "rev-1",
+          "user": "Mohammad Farooq",
+          "rating": 5,
+          "date": "Yesterday",
+          "comment": "MashaAllah bohot behtareen quality ki pdf hai. Bachon ko sikhane ke liye zabardast."
+        }
+      ],
+      "faqs": [
+        {
+          "question": "Yeh PDF kab milegi?",
+          "answer": "Payment complete hote hi turant download button mil jayega aur email par bhi link bhej di jayegi."
+        }
+      ],
+      "createdAt": "2026-10-21T06:20:54.732Z"
+    }
+  },
   "download_logs": [
     {
       "orderId": "test-prod-1",

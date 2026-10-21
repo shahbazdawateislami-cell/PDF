@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Product, Order, DownloadLog, Bundle, HeroBannerConfig, HeroStackedCard, Coupon } from '../types';
 import { INITIAL_PRODUCTS, CATEGORIES_LIST, INITIAL_BUNDLES } from '../data/initialProducts';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { collection, getDocs, setDoc, doc, deleteDoc, getDoc } from 'firebase/firestore';
+import { signInAnonymously } from 'firebase/auth';
 
 export const DEFAULT_HERO_CONFIG: HeroBannerConfig = {
   backgroundImage: '',
@@ -374,38 +375,65 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Sync with Server and Firestore in background
   useEffect(() => {
     async function syncData() {
+      // Ensure anonymous auth is initialized for Firestore operations
+      try {
+        if (!auth.currentUser) {
+          await signInAnonymously(auth);
+        }
+      } catch (authErr) {
+        console.warn('Anonymous auth sync notice:', authErr);
+      }
+
       // 1. Sync custom products from server database
+      let serverProducts: Product[] = [];
       try {
         const res = await fetch('/api/products');
         if (res.ok) {
-          const serverProducts: Product[] = await res.json();
-          if (Array.isArray(serverProducts) && serverProducts.length > 0) {
-            setProducts((prev) => {
-              const map = new Map<string, Product>();
-              prev.forEach((p) => map.set(p.id, p));
-              serverProducts.forEach((p) => map.set(p.id, p));
-              return Array.from(map.values());
-            });
-          }
+          const list: Product[] = await res.json();
+          if (Array.isArray(list)) serverProducts = list;
         }
       } catch (err) {}
 
       // 2. Sync with Firestore
+      let dbProducts: Product[] = [];
       try {
         const snap = await getDocs(collection(db, 'products'));
         if (!snap.empty) {
-          const dbProducts: Product[] = [];
           snap.forEach((d) => dbProducts.push(d.data() as Product));
-          if (dbProducts.length > 0) {
-            setProducts((prev) => {
-              const map = new Map<string, Product>();
-              prev.forEach((p) => map.set(p.id, p));
-              dbProducts.forEach((p) => map.set(p.id, p));
-              return Array.from(map.values());
-            });
-          }
         }
+      } catch (err) {
+        console.warn('Firestore fetch products notice:', err);
+      }
 
+      // Merge products with custom products ALWAYS prioritized at the top
+      if (serverProducts.length > 0 || dbProducts.length > 0) {
+        setProducts((prev) => {
+          const map = new Map<string, Product>();
+          // Base: existing / initial
+          prev.forEach((p) => map.set(p.id, p));
+          // Server items
+          serverProducts.forEach((p) => map.set(p.id, p));
+          // Firestore items (highest authority)
+          dbProducts.forEach((p) => map.set(p.id, p));
+
+          const all = Array.from(map.values());
+          const initialIdSet = new Set(INITIAL_PRODUCTS.map((ip) => ip.id));
+          const custom = all.filter((p) => !initialIdSet.has(p.id) || p.id.startsWith('pdf-'));
+          const standard = all.filter((p) => initialIdSet.has(p.id) && !p.id.startsWith('pdf-'));
+
+          // Sort custom products newest first
+          custom.sort((a, b) => {
+            const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+            const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+            return timeB - timeA;
+          });
+
+          return [...custom, ...standard];
+        });
+      }
+
+      // Sync hero banner config from Firestore
+      try {
         const heroDoc = await getDoc(doc(db, 'settings', 'hero_banner'));
         if (heroDoc.exists()) {
           const remoteHero = heroDoc.data() as HeroBannerConfig;
@@ -413,28 +441,24 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
             setHeroConfig((prev) => ({ ...prev, ...remoteHero }));
           }
         }
+      } catch (err) {}
 
-        // 3. Sync coupons from Firestore
-        try {
-          const couponSnap = await getDocs(collection(db, 'coupons'));
-          if (!couponSnap.empty) {
-            const dbCoupons: Coupon[] = [];
-            couponSnap.forEach((d) => dbCoupons.push(d.data() as Coupon));
-            if (dbCoupons.length > 0) {
-              setCoupons((prev) => {
-                const map = new Map<string, Coupon>();
-                prev.forEach((c) => map.set(c.id || c.code, c));
-                dbCoupons.forEach((c) => map.set(c.id || c.code, c));
-                return Array.from(map.values());
-              });
-            }
+      // Sync coupons from Firestore
+      try {
+        const couponSnap = await getDocs(collection(db, 'coupons'));
+        if (!couponSnap.empty) {
+          const dbCoupons: Coupon[] = [];
+          couponSnap.forEach((d) => dbCoupons.push(d.data() as Coupon));
+          if (dbCoupons.length > 0) {
+            setCoupons((prev) => {
+              const map = new Map<string, Coupon>();
+              prev.forEach((c) => map.set(c.id || c.code, c));
+              dbCoupons.forEach((c) => map.set(c.id || c.code, c));
+              return Array.from(map.values());
+            });
           }
-        } catch (e) {
-          // Fallback to local
         }
-      } catch (err) {
-        // Fallback to local
-      }
+      } catch (e) {}
     }
     syncData();
   }, []);
@@ -446,9 +470,10 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
       id: newId,
       createdAt: new Date().toISOString()
     };
-    setProducts((prev) => [newProduct, ...prev]);
+    // Put immediately at index 0 so it instantly shows up on website
+    setProducts((prev) => [newProduct, ...prev.filter((p) => p.id !== newId)]);
 
-    // Save to server database
+    // 1. Save to server database
     try {
       await fetch('/api/products', {
         method: 'POST',
@@ -459,8 +484,13 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
       console.warn('Server product save notice:', e);
     }
 
+    // 2. Save to Firestore with auth guarantee
     try {
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
       await setDoc(doc(db, 'products', newId), newProduct);
+      console.log('Product published to Firestore successfully:', newId);
     } catch (e) {
       console.warn('Firestore write notice:', e);
     }
@@ -490,9 +520,12 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
 
     try {
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
       await setDoc(doc(db, 'products', id), updated, { merge: true });
     } catch (e) {
-      console.warn('Firestore update failed, saved to local state only:', e);
+      console.warn('Firestore update failed:', e);
     }
   };
 
@@ -504,9 +537,12 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch (e) {}
 
     try {
+      if (!auth.currentUser) {
+        await signInAnonymously(auth);
+      }
       await deleteDoc(doc(db, 'products', id));
     } catch (e) {
-      console.warn('Firestore delete failed, saved to local state only:', e);
+      console.warn('Firestore delete failed:', e);
     }
   };
 

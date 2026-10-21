@@ -98,10 +98,19 @@ export default function Home() {
     return () => clearInterval(interval);
   }, []);
 
-  // Group products by section
-  const trendingProducts = products.filter((p) => p.isTrending || p.id.includes('chatgpt') || p.id.includes('english') || p.id.includes('business') || p.id.includes('students')).slice(0, 6);
-  const bestsellingProducts = products.filter((p) => p.isBestseller || p.id.includes('marketing') || p.id.includes('islamic') || p.id.includes('canva') || p.id.includes('prompt') || p.id.includes('excel') || p.id.includes('video')).slice(0, 6);
-  const newArrivals = products.filter((p) => p.isNewArrival || p.id.includes('youtube') || p.id.includes('ctet') || p.id.includes('science') || p.id.includes('hindi') || p.id.includes('kids') || p.id.includes('academic')).slice(0, 6);
+  // Group products by section (Feature newly uploaded PDFs prominently)
+  const customUploadedProducts = products.filter((p) => p.id.startsWith('pdf-'));
+  const trendingProducts = [
+    ...customUploadedProducts,
+    ...products.filter((p) => !p.id.startsWith('pdf-') && (p.isTrending || p.id.includes('chatgpt') || p.id.includes('english') || p.id.includes('business') || p.id.includes('students')))
+  ].slice(0, 8);
+
+  const bestsellingProducts = products.filter((p) => p.isBestseller || p.id.includes('marketing') || p.id.includes('islamic') || p.id.includes('canva') || p.id.includes('prompt') || p.id.includes('excel') || p.id.includes('video')).slice(0, 8);
+
+  const newArrivals = [
+    ...customUploadedProducts,
+    ...products.filter((p) => !p.id.startsWith('pdf-') && (p.isNewArrival || p.id.includes('youtube') || p.id.includes('ctet') || p.id.includes('science') || p.id.includes('hindi') || p.id.includes('kids') || p.id.includes('academic')))
+  ].slice(0, 8);
 
   // Catalog for full 2-by-2 products showcase
   const displayedCatalogProducts = catalogCategory === 'all'
