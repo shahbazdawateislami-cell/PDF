@@ -93,15 +93,44 @@ export default function Success() {
     }
 
     try {
-      // 1. Download real uploaded PDF file if available, or fetch from secure stream
       const targetUrl = product?.pdfUrl || `/api/download/${activeOrder?.id || orderId}`;
+      const cleanTitle = (product?.title || 'PDF_Master_Guide').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+      // CASE A: Base64 Data URL (Stored in Firestore/Client)
+      if (targetUrl.startsWith('data:')) {
+        const link = document.createElement('a');
+        link.href = targetUrl;
+        link.download = `${cleanTitle}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setDownloading(false);
+        setDownloadSuccess(true);
+        return;
+      }
+
+      // CASE B: Direct External Cloud Link (Google Drive, Dropbox, Cloud URL)
+      if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+        const link = document.createElement('a');
+        link.href = targetUrl;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.download = `${cleanTitle}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setDownloading(false);
+        setDownloadSuccess(true);
+        return;
+      }
+
+      // CASE C: Server File Stream
       const res = await fetch(targetUrl);
       if (res.ok) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        const cleanTitle = (product?.title || 'PDF_Master_Guide').replace(/[^a-zA-Z0-9_-]/g, '_');
         link.download = `${cleanTitle}.pdf`;
         document.body.appendChild(link);
         link.click();
@@ -115,7 +144,7 @@ export default function Success() {
       console.warn('Direct stream fetch notice:', e);
     }
 
-    // 2. Direct browser navigation fallback
+    // CASE D: Direct browser navigation fallback
     const fallbackLink = document.createElement('a');
     fallbackLink.href = `/api/download/${activeOrder?.id || orderId}`;
     fallbackLink.download = `${(product?.title || 'PDF_Guide').replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;

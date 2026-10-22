@@ -108,6 +108,8 @@ app.use(express.json({
   }
 }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));
+app.use('/api/files', express.static(UPLOADS_DIR, { maxAge: '7d' }));
 
 const DEFAULT_RAZORPAY_KEY_ID = 'rzp_live_TnGvSxZuZ5aAKf';
 const DEFAULT_RAZORPAY_KEY_SECRET = 'cAvLBUr7MwFWLricuOe7wCqv';
@@ -878,7 +880,8 @@ if (!isProduction) {
   });
 }
 
-const PORT = Number(process.env.PORT) || 3000;
+// Dev server runtime environment constraint: must listen on port 3000
+const PORT = 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`PDF Master India server running on port ${PORT}`);
 });

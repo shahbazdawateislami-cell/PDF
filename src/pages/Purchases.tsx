@@ -28,13 +28,43 @@ export default function Purchases() {
     try {
       const prod = products.find((p) => p.id === productId);
       const downloadTarget = prod?.pdfUrl || `/api/download/${orderId}?productId=${encodeURIComponent(productId)}`;
+      const cleanName = (title || 'PDF_Master_Guide').replace(/[^a-zA-Z0-9_-]/g, '_');
+
+      // CASE A: Base64 Data URL
+      if (downloadTarget.startsWith('data:')) {
+        const link = document.createElement('a');
+        link.href = downloadTarget;
+        link.download = `${cleanName}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setDownloadMsg(`✓ "${title}" downloaded successfully!`);
+        setTimeout(() => setDownloadMsg(null), 3500);
+        return;
+      }
+
+      // CASE B: Direct External Cloud URL
+      if (downloadTarget.startsWith('http://') || downloadTarget.startsWith('https://')) {
+        const link = document.createElement('a');
+        link.href = downloadTarget;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.download = `${cleanName}.pdf`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setDownloadMsg(`✓ "${title}" downloaded successfully!`);
+        setTimeout(() => setDownloadMsg(null), 3500);
+        return;
+      }
+
+      // CASE C: Stream
       const res = await fetch(downloadTarget);
       if (res.ok) {
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
         const link = document.createElement('a');
         link.href = url;
-        const cleanName = (title || 'PDF_Master_Guide').replace(/[^a-zA-Z0-9_-]/g, '_');
         link.download = `${cleanName}.pdf`;
         document.body.appendChild(link);
         link.click();
