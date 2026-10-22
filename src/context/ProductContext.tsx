@@ -10,21 +10,22 @@ import { collection, getDocs, setDoc, doc, deleteDoc, getDoc, onSnapshot } from 
  */
 export const sanitizeForFirestore = (prod: any): any => {
   const sanitized = { ...prod };
-  // Never put raw base64 data URLs exceeding 150KB into a Firestore document
+  // Never put raw base64 data URLs exceeding 150KB into a Firestore document for PDFs
   if (typeof sanitized.pdfUrl === 'string' && sanitized.pdfUrl.startsWith('data:') && sanitized.pdfUrl.length > 150000) {
     sanitized.pdfUrl = '';
   }
-  if (typeof sanitized.coverImage === 'string' && sanitized.coverImage.startsWith('data:') && sanitized.coverImage.length > 250000) {
+  // Allow optimized Web JPEG covers up to 500KB (typically ~45KB)
+  if (typeof sanitized.coverImage === 'string' && sanitized.coverImage.startsWith('data:') && sanitized.coverImage.length > 500000) {
     sanitized.coverImage = '';
   }
   if (Array.isArray(sanitized.samplePages)) {
     sanitized.samplePages = sanitized.samplePages.filter(
-      (p: string) => typeof p === 'string' && (!p.startsWith('data:') || p.length < 250000)
+      (p: string) => typeof p === 'string' && (!p.startsWith('data:') || p.length < 350000)
     );
   }
   if (Array.isArray(sanitized.previewImages)) {
     sanitized.previewImages = sanitized.previewImages.filter(
-      (p: string) => typeof p === 'string' && (!p.startsWith('data:') || p.length < 250000)
+      (p: string) => typeof p === 'string' && (!p.startsWith('data:') || p.length < 350000)
     );
   }
   return sanitized;
@@ -160,6 +161,7 @@ interface ProductContextType {
 const ProductContext = createContext<ProductContextType | undefined>(undefined);
 
 const LOCAL_STORAGE_KEY = 'pdf_master_products_v3';
+const DELETED_IDS_STORAGE_KEY = 'pdf_master_deleted_ids_v1';
 const BUNDLES_STORAGE_KEY = 'pdf_master_bundles_v1';
 const COUPONS_STORAGE_KEY = 'pdf_master_coupons_v1';
 const CART_STORAGE_KEY = 'pdf_master_cart';
@@ -170,6 +172,16 @@ const PDF_FILES_STORAGE_KEY = 'pdf_master_uploaded_files';
 const HERO_CONFIG_STORAGE_KEY = 'pdf_master_hero_banner_v2';
 
 export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [deletedProductIds, setDeletedProductIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(DELETED_IDS_STORAGE_KEY);
+      if (saved) {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr)) return new Set(arr);
+      }
+    } catch {}
+    return new Set();
+  });
   const [products, setProducts] = useState<Product[]>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -422,38 +434,69 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
           collection(db, 'products'),
           (snapshot) => {
             const firestoreProducts: Product[] = [];
-            snapshot.forEach((d) => firestoreProducts.push(d.data() as Product));
+            snapshot.forEach((d) => {
+              const data = d.data();
+              if (data) {
+                const docId = (typeof data.id === 'string' && data.id.trim()) ? data.id : d.id;
+                firestoreProducts.push({
+                  ...data,
+                  id: docId
+                } as Product);
+              }
+            });
 
-            // Merge server and Firestore items
-            const customMap = new Map<string, Product>();
-            serverProducts.forEach((p) => customMap.set(p.id, p));
-            firestoreProducts.forEach((p) => customMap.set(p.id, p));
+            // Comprehensive catalog merging:
+            // 1. Start with INITIAL_PRODUCTS as the default baseline (excluding deleted)
+            const catalogMap = new Map<string, Product>();
+            INITIAL_PRODUCTS.forEach((ip) => {
+              if (!deletedProductIds.has(ip.id)) {
+                catalogMap.set(ip.id, { ...ip });
+              }
+            });
 
+            // 2. Overlay server products (contains user edits or custom additions)
+            serverProducts.forEach((p) => {
+              if (p && typeof p.id === 'string' && p.id.trim() && !deletedProductIds.has(p.id)) {
+                catalogMap.set(p.id, { ...(catalogMap.get(p.id) || {}), ...p });
+              }
+            });
+
+            // 3. Overlay Firestore products (supreme cloud source of truth for all edits & uploads)
+            firestoreProducts.forEach((p) => {
+              if (p && typeof p.id === 'string' && p.id.trim() && !deletedProductIds.has(p.id)) {
+                catalogMap.set(p.id, { ...(catalogMap.get(p.id) || {}), ...p });
+              }
+            });
+
+            // 4. If a custom product ('pdf-...') was removed from Firestore, remove from catalog
             if (firestoreProducts.length > 0) {
-              const activeFirestoreIds = new Set(firestoreProducts.map((p) => p.id));
-              Array.from(customMap.keys()).forEach((k) => {
+              const activeFirestoreIds = new Set(
+                firestoreProducts
+                  .filter((p) => p && typeof p.id === 'string')
+                  .map((p) => p.id)
+              );
+              Array.from(catalogMap.keys()).forEach((k) => {
                 if (k.startsWith('pdf-') && !activeFirestoreIds.has(k)) {
-                  customMap.delete(k);
+                  catalogMap.delete(k);
                 }
               });
             }
 
-            const initialIdSet = new Set(INITIAL_PRODUCTS.map((ip) => ip.id));
-            const activeCustom = Array.from(customMap.values()).filter(
-              (p) => !initialIdSet.has(p.id) || p.id.startsWith('pdf-')
-            );
-            activeCustom.sort((a, b) => {
+            const allProductsList = Array.from(catalogMap.values());
+            // Sort: Newly uploaded PDFs first, then remaining catalog
+            allProductsList.sort((a, b) => {
+              const aIsPdf = a.id.startsWith('pdf-');
+              const bIsPdf = b.id.startsWith('pdf-');
+              if (aIsPdf && !bIsPdf) return -1;
+              if (!aIsPdf && bIsPdf) return 1;
               const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
               const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
               return timeB - timeA;
             });
 
-            const standard = INITIAL_PRODUCTS;
-            const combined = [...activeCustom, ...standard];
-
-            setProducts(combined);
+            setProducts(allProductsList);
             try {
-              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(combined));
+              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(allProductsList));
             } catch {}
           },
           (error) => {
@@ -482,7 +525,16 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
           (snapshot) => {
             if (!snapshot.empty) {
               const dbCoupons: Coupon[] = [];
-              snapshot.forEach((d) => dbCoupons.push(d.data() as Coupon));
+              snapshot.forEach((d) => {
+                const data = d.data();
+                if (data) {
+                  const docId = (typeof data.id === 'string' && data.id.trim()) ? data.id : d.id;
+                  dbCoupons.push({
+                    ...data,
+                    id: docId
+                  } as Coupon);
+                }
+              });
               if (dbCoupons.length > 0) {
                 setCoupons(dbCoupons);
                 try {
@@ -550,12 +602,21 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setProducts((prev) =>
       prev.map((p) => {
         if (p.id === id) {
-          fullUpdatedProduct = { ...p, ...updated };
+          fullUpdatedProduct = { ...p, ...updated, id };
           return fullUpdatedProduct;
         }
         return p;
       })
     );
+
+    // If not found in active products, find in INITIAL_PRODUCTS
+    if (!fullUpdatedProduct) {
+      const match = INITIAL_PRODUCTS.find((ip) => ip.id === id);
+      if (match) {
+        fullUpdatedProduct = { ...match, ...updated, id };
+        setProducts((prev) => [fullUpdatedProduct!, ...prev]);
+      }
+    }
 
     if (fullUpdatedProduct) {
       try {
@@ -572,12 +633,13 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } catch {}
 
       try {
-        const sanitized = sanitizeForFirestore(updated);
+        const sanitized = sanitizeForFirestore(fullUpdatedProduct);
         const writePromise = setDoc(doc(db, 'products', id), sanitized, { merge: true });
         const timeoutPromise = new Promise((_, reject) =>
           setTimeout(() => reject(new Error('Firestore update timeout')), 2500)
         );
         await Promise.race([writePromise, timeoutPromise]);
+        console.log('✓ Product updated in Firestore:', id);
       } catch (e) {
         console.warn('Firestore update notice (non-fatal):', e);
       }
@@ -585,6 +647,15 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const deleteProduct = async (id: string): Promise<void> => {
+    setDeletedProductIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      try {
+        localStorage.setItem(DELETED_IDS_STORAGE_KEY, JSON.stringify(Array.from(next)));
+      } catch {}
+      return next;
+    });
+
     setProducts((prev) => prev.filter((p) => p.id !== id));
 
     try {
@@ -607,6 +678,10 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const resetToDefaults = async (): Promise<void> => {
+    setDeletedProductIds(new Set());
+    try {
+      localStorage.removeItem(DELETED_IDS_STORAGE_KEY);
+    } catch {}
     setProducts(INITIAL_PRODUCTS);
     setBundles(INITIAL_BUNDLES);
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_PRODUCTS));

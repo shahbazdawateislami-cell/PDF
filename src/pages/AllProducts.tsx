@@ -42,9 +42,9 @@ export default function AllProducts() {
     if (!matchesSearch) return false;
 
     if (selectedCategory === 'all') return true;
-    if (selectedCategory === 'trending') return !!p.isTrending || p.id.startsWith('pdf-');
+    if (selectedCategory === 'trending') return !!p.isTrending || (typeof p.id === 'string' && p.id.startsWith('pdf-'));
     if (selectedCategory === 'bestselling') return !!p.isBestseller;
-    if (selectedCategory === 'new') return !!p.isNewArrival || p.id.startsWith('pdf-');
+    if (selectedCategory === 'new') return !!p.isNewArrival || (typeof p.id === 'string' && p.id.startsWith('pdf-'));
 
     return p.category === selectedCategory;
   });

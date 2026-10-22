@@ -272,6 +272,7 @@ export default function Admin() {
   const [isUploadingCover, setIsUploadingCover] = useState(false);
   const [uploadProgressPercent, setUploadProgressPercent] = useState<number>(0);
   const [pdfUploadSource, setPdfUploadSource] = useState<'device' | 'url'>('device');
+  const [coverUploadSource, setCoverUploadSource] = useState<'device' | 'url'>('device');
 
   // PDF Inside Pages & Sample Material for Horizontal Carousel
   const [formSamplePages, setFormSamplePages] = useState<string[]>([]);
@@ -505,6 +506,53 @@ export default function Admin() {
     return trimmed;
   };
 
+  // Client-side instant image compressor: turns large 3MB-10MB camera photos into crisp ~35KB-60KB Web JPEG
+  // Works 100% offline, on Vercel, on aldahr.online, and safely within Firestore 1MB limits
+  const compressImageToDataUrl = (
+    file: File | Blob,
+    maxWidth = 600,
+    maxHeight = 850,
+    quality = 0.78
+  ): Promise<string> => {
+    return new Promise((resolve) => {
+      try {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            let width = img.width;
+            let height = img.height;
+            if (width > maxWidth || height > maxHeight) {
+              const ratio = Math.min(maxWidth / width, maxHeight / height);
+              width = Math.max(Math.round(width * ratio), 100);
+              height = Math.max(Math.round(height * ratio), 100);
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, width, height);
+              ctx.drawImage(img, 0, 0, width, height);
+              const compressedDataUrl = canvas.toDataURL('image/jpeg', quality);
+              resolve(compressedDataUrl);
+              return;
+            }
+            resolve((e.target?.result as string) || '');
+          };
+          img.onerror = () => resolve((e.target?.result as string) || '');
+          img.src = (e.target?.result as string) || '';
+        };
+        reader.onerror = () => resolve('');
+        reader.readAsDataURL(file);
+      } catch (err) {
+        console.warn('Canvas compression fallback:', err);
+        resolve('');
+      }
+    });
+  };
+
   // Ultra-fast, non-blocking native streaming upload with real-time progress tracking
   const uploadFileToServer = (
     file: File | Blob,
@@ -615,7 +663,7 @@ export default function Admin() {
     });
   };
 
-  // Handle Cover Image File Selection from Mobile Gallery / PC with instant upload
+  // Handle Cover Image File Selection from Mobile Gallery / PC with instant upload & compression
   const handleCoverFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -625,26 +673,30 @@ export default function Admin() {
       }
       setUploadedCoverFile(file);
       setUploadedCoverName(file.name);
+      setIsUploadingCover(true);
+      showNotify(`⏳ Cover photo "${file.name}" optimize ho rahi hai...`);
+
+      // 1. Client-side Canvas compression to ensure a permanent, high-quality, lightweight ~45KB Web JPEG
       try {
-        const previewUrl = URL.createObjectURL(file);
-        setFormCoverImage(previewUrl);
-      } catch (err) {
-        console.warn('URL.createObjectURL notice:', err);
+        const compressedDataUrl = await compressImageToDataUrl(file, 600, 850, 0.78);
+        if (compressedDataUrl) {
+          setFormCoverImage(compressedDataUrl);
+          showNotify(`✓ Cover photo "${file.name}" select aur ready ho gayi!`);
+        }
+      } catch (compErr) {
+        console.warn('Cover compression fallback notice:', compErr);
       }
 
-      setIsUploadingCover(true);
-      showNotify(`⏳ Cover photo "${file.name}" select ho gayi aur upload ho rahi hai...`);
+      // 2. Also try server upload if server backend is running
       const targetProductId = editingProduct?.id || `cover-${Date.now()}`;
-
       try {
         const uploadRes = await uploadFileToServer(file, targetProductId, 'image');
-        if (uploadRes && uploadRes.fileUrl) {
+        if (uploadRes && uploadRes.fileUrl && !uploadRes.fileUrl.startsWith('blob:')) {
           setFormCoverImage(uploadRes.fileUrl);
           setUploadedCoverName(uploadRes.fileName || file.name);
-          showNotify(`✓ Cover photo "${file.name}" successfully upload ho gayi!`);
         }
       } catch (err) {
-        console.warn('Cover immediate upload will retry during product save:', err);
+        console.warn('Cover server upload notice (safe on static hosts):', err);
       } finally {
         setIsUploadingCover(false);
       }
@@ -708,23 +760,27 @@ export default function Admin() {
     }
   };
 
-  // Handle Multiple Inside Pages File Selection from Mobile Gallery / PC
-  const handleSamplePagesFilesChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Multiple Inside Pages File Selection from Mobile Gallery / PC with instant compression
+  const handleSamplePagesFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     const fileList = Array.from(files);
     setUploadedSampleFiles((prev) => [...prev, ...fileList]);
-    const previewUrls = fileList.map((f) => {
-      try {
-        return URL.createObjectURL(f);
-      } catch {
-        return '';
-      }
-    }).filter(Boolean);
+    showNotify(`⏳ Attached ${fileList.length} inside page(s), optimizing...`);
 
-    setFormSamplePages((prev) => [...prev, ...previewUrls]);
-    showNotify(`✓ Attached ${fileList.length} inside page(s) to preview carousel!`);
+    try {
+      const compressedList = await Promise.all(
+        fileList.map((f) => compressImageToDataUrl(f, 600, 850, 0.72))
+      );
+      const validPages = compressedList.filter(Boolean);
+      if (validPages.length > 0) {
+        setFormSamplePages((prev) => [...prev, ...validPages]);
+        showNotify(`✓ Attached ${validPages.length} inside page(s) to preview carousel!`);
+      }
+    } catch {
+      showNotify(`✓ Attached ${fileList.length} inside page(s)`);
+    }
     e.target.value = '';
   };
 
@@ -783,12 +839,14 @@ export default function Admin() {
     setFormHighlights((p.highlights || []).join('\n'));
     setFormBadge(p.badge || '');
     setFormCoverImage(p.coverImage || '');
-    setUploadedCoverName(null);
+    setCoverUploadSource(p.coverImage && (p.coverImage.startsWith('http://') || p.coverImage.startsWith('https://')) ? 'url' : 'device');
+    setUploadedCoverName(p.coverImage ? 'Current Active Cover' : null);
     setUploadedCoverFile(null);
     setUploadedPdfName(p.pdfFileName || (p.pdfUrl ? 'Existing Uploaded PDF' : null));
     setUploadedPdfFile(null);
     setUploadedPdfData(null);
     setUploadedPdfUrl(p.pdfUrl || null);
+    setPdfUploadSource(p.pdfUrl && (p.pdfUrl.startsWith('http://') || p.pdfUrl.startsWith('https://')) ? 'url' : 'device');
     setUploadedSampleFiles([]);
     setUploadStatusText('');
     setFormPagesCount(p.pdfPagesCount || 120);
@@ -815,18 +873,22 @@ export default function Admin() {
     try {
       const generatedOrExistingId = editingProduct?.id || `pdf-${Date.now()}`;
 
-      // 1. Upload Cover Image if a local file was selected and not already uploaded to server
+      // 1. Process Cover Image: prioritize user-uploaded photo or user-provided URL
       let finalCoverImage = formCoverImage;
       if (uploadedCoverFile && (!finalCoverImage || finalCoverImage.startsWith('blob:'))) {
-        setUploadStatusText('Book Cover image upload ho rahi hai...');
+        setUploadStatusText('Book Cover photo optimize ho rahi hai...');
         try {
-          const coverUploadRes = await uploadFileToServer(uploadedCoverFile, generatedOrExistingId, 'image');
-          finalCoverImage = coverUploadRes.fileUrl;
+          const compressed = await compressImageToDataUrl(uploadedCoverFile, 600, 850, 0.78);
+          if (compressed) {
+            finalCoverImage = compressed;
+          }
         } catch (coverErr) {
-          console.warn('Cover upload warning during save:', coverErr);
+          console.warn('Cover compress warning during save:', coverErr);
         }
       }
-      if (!finalCoverImage || finalCoverImage.startsWith('blob:')) {
+
+      // ONLY use SVG if user did NOT upload or enter any custom image at all
+      if (!finalCoverImage || finalCoverImage.trim() === '' || finalCoverImage.startsWith('blob:')) {
         finalCoverImage = createBookCoverSvg(
           formTitle.slice(0, 24),
           'Practical Edition',
@@ -3037,43 +3099,91 @@ export default function Admin() {
 
                 {/* 1. Cover Image Picker */}
                 <div>
-                  <label className="block font-bold text-gray-800 mb-1">
-                    1. Book Cover Image (Gallery / Camera / PC):
-                  </label>
-                  <input
-                    type="file"
-                    ref={coverFileInputRef}
-                    accept="image/*"
-                    onChange={handleCoverFileChange}
-                    className="hidden"
-                  />
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => coverFileInputRef.current?.click()}
-                      className="px-3.5 py-2 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-bold flex items-center gap-1.5 shadow-2xs text-xs"
-                    >
-                      <ImageIcon size={14} className="text-orange-600" />
-                      {uploadedCoverName ? 'Change Cover Photo' : 'Select Photo from Device'}
-                    </button>
-                    {isUploadingCover ? (
-                      <span className="text-[11px] text-amber-700 font-bold flex items-center gap-1 animate-pulse">
-                        <RefreshCw size={12} className="animate-spin text-amber-600" />
-                        Cover Uploading...
-                      </span>
-                    ) : uploadedCoverName ? (
-                      <span className="text-[11px] text-emerald-700 font-bold truncate max-w-xs flex items-center gap-1">
-                        <Check size={13} className="text-emerald-600 font-black" />
-                        ✓ {uploadedCoverName}
-                      </span>
-                    ) : null}
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block font-bold text-gray-800 text-xs">
+                      1. Book Cover Image (Gallery / Camera / PC):
+                    </label>
+                    <div className="inline-flex rounded-lg p-0.5 bg-gray-200 text-[10px] font-bold">
+                      <button
+                        type="button"
+                        onClick={() => setCoverUploadSource('device')}
+                        className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                          coverUploadSource === 'device' ? 'bg-white text-gray-900 shadow-2xs' : 'text-gray-600'
+                        }`}
+                      >
+                        📱 Device Photo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setCoverUploadSource('url')}
+                        className={`px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                          coverUploadSource === 'url' ? 'bg-white text-gray-900 shadow-2xs' : 'text-gray-600'
+                        }`}
+                      >
+                        🔗 Image URL
+                      </button>
+                    </div>
                   </div>
+
+                  {coverUploadSource === 'url' ? (
+                    <div className="space-y-1.5">
+                      <input
+                        type="url"
+                        value={formCoverImage || ''}
+                        onChange={(e) => {
+                          const val = e.target.value.trim();
+                          setFormCoverImage(val);
+                          setUploadedCoverName(val ? 'Custom Image URL' : null);
+                        }}
+                        placeholder="Paste image link here (e.g. https://... or direct image URL)..."
+                        className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl text-xs outline-none focus:border-blue-500 font-mono"
+                      />
+                      <p className="text-[10px] text-gray-500">
+                        Direct web links (JPG, PNG, WebP) load instantly across all devices.
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <input
+                        type="file"
+                        ref={coverFileInputRef}
+                        accept="image/*"
+                        onChange={handleCoverFileChange}
+                        className="hidden"
+                      />
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <button
+                          type="button"
+                          onClick={() => coverFileInputRef.current?.click()}
+                          className="px-3.5 py-2 rounded-xl bg-white border border-gray-300 hover:bg-gray-50 text-gray-800 font-bold flex items-center gap-1.5 shadow-2xs text-xs cursor-pointer active:scale-95"
+                        >
+                          <ImageIcon size={14} className="text-orange-600" />
+                          {uploadedCoverName ? 'Change Cover Photo' : 'Select Photo from Device'}
+                        </button>
+                        {isUploadingCover ? (
+                          <span className="text-[11px] text-amber-700 font-bold flex items-center gap-1 animate-pulse">
+                            <RefreshCw size={12} className="animate-spin text-amber-600" />
+                            Optimizing Cover...
+                          </span>
+                        ) : uploadedCoverName ? (
+                          <span className="text-[11px] text-emerald-700 font-bold truncate max-w-xs flex items-center gap-1 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
+                            <Check size={13} className="text-emerald-600 font-black" />
+                            ✓ {uploadedCoverName}
+                          </span>
+                        ) : null}
+                      </div>
+                    </div>
+                  )}
+
                   {formCoverImage && (
-                    <div className="mt-2 flex items-center gap-2 bg-white p-2 rounded-xl border border-gray-200 w-fit">
-                      <img src={formCoverImage} alt="Preview" className="w-12 h-16 object-cover rounded shadow border" />
+                    <div className="mt-2.5 flex items-center gap-3 bg-white p-2.5 rounded-xl border border-emerald-200 w-fit shadow-2xs">
+                      <img src={formCoverImage} alt="Cover Preview" className="w-12 h-16 object-cover rounded shadow border" />
                       <div className="text-left">
-                        <span className="text-[11px] font-bold text-gray-900 block">Cover Photo Ready</span>
-                        <span className="text-[10px] text-gray-500">Visible on storefront</span>
+                        <span className="text-[11px] font-bold text-emerald-800 flex items-center gap-1">
+                          <Check size={12} className="text-emerald-600 font-black" />
+                          Custom Cover Photo Active
+                        </span>
+                        <span className="text-[10px] text-gray-500 block">Website aur store par yahi cover show hoga</span>
                       </div>
                     </div>
                   )}
