@@ -487,6 +487,24 @@ export default function Admin() {
     showNotify('✓ Saare default coupons reset aur restore ho gaye!');
   };
 
+  // Automatically format Google Drive or Dropbox links to direct instant download links
+  const formatCloudPdfUrl = (raw: string): string => {
+    const trimmed = raw.trim();
+    if (!trimmed) return '';
+    const driveMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+    if (driveMatch && driveMatch[1]) {
+      return `https://drive.google.com/uc?export=download&id=${driveMatch[1]}`;
+    }
+    const driveIdMatch = trimmed.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (trimmed.includes('drive.google.com') && driveIdMatch && driveIdMatch[1]) {
+      return `https://drive.google.com/uc?export=download&id=${driveIdMatch[1]}`;
+    }
+    if (trimmed.includes('dropbox.com') && trimmed.includes('dl=0')) {
+      return trimmed.replace('dl=0', 'dl=1');
+    }
+    return trimmed;
+  };
+
   // Ultra-fast, non-blocking native streaming upload with real-time progress tracking
   const uploadFileToServer = (
     file: File | Blob,
@@ -572,10 +590,16 @@ export default function Admin() {
                 }
               }
             } catch {}
-            // Static hosting fallback: use direct Data URL
+            // Static hosting fallback: avoid massive 20MB base64 in state
+            let fallbackUrl = base64Data;
+            try {
+              if (fileType === 'pdf' || (file as File).size > 500 * 1024) {
+                fallbackUrl = URL.createObjectURL(file);
+              }
+            } catch {}
             setUploadProgressPercent(100);
             resolve({
-              fileUrl: base64Data,
+              fileUrl: fallbackUrl,
               fileName: originalName,
               size: (file as File).size || 0
             });
@@ -3090,15 +3114,19 @@ export default function Admin() {
                         value={uploadedPdfUrl || ''}
                         onChange={(e) => {
                           const val = e.target.value.trim();
-                          setUploadedPdfUrl(val);
-                          setUploadedPdfName(val ? 'Google Drive / Direct PDF Link' : null);
+                          const formatted = formatCloudPdfUrl(val);
+                          setUploadedPdfUrl(formatted);
+                          setUploadedPdfName(formatted ? 'Cloud PDF Link (Google Drive / Dropbox)' : null);
                         }}
-                        placeholder="Paste Google Drive, Dropbox, or Direct PDF URL here..."
+                        placeholder="Paste Google Drive, Dropbox, or Direct PDF link here..."
                         className="w-full px-3 py-2 bg-white border border-gray-300 rounded-xl text-xs outline-none focus:border-blue-500 font-mono"
                       />
-                      <p className="text-[10px] text-gray-500">
-                        Tip: Google Drive link must be set to "Anyone with the link can view". Instant access across all devices!
-                      </p>
+                      <div className="flex items-center gap-1.5 text-[11px] text-emerald-800 bg-emerald-50 p-2 rounded-lg border border-emerald-200">
+                        <Zap size={14} className="text-emerald-600 shrink-0" />
+                        <span>
+                          <strong>12MB - 100MB PDF ke liye best:</strong> Google Drive link paste karein, yeh bina kisi file size limit ke 1 second me upload &amp; save ho jayega!
+                        </span>
+                      </div>
                     </div>
                   ) : (
                     <div>

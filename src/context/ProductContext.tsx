@@ -3,7 +3,32 @@ import { Product, Order, DownloadLog, Bundle, HeroBannerConfig, HeroStackedCard,
 import { INITIAL_PRODUCTS, CATEGORIES_LIST, INITIAL_BUNDLES } from '../data/initialProducts';
 import { db, auth } from '../firebase';
 import { collection, getDocs, setDoc, doc, deleteDoc, getDoc, onSnapshot } from 'firebase/firestore';
-import { signInAnonymously } from 'firebase/auth';
+
+/**
+ * Protects Firestore and LocalStorage from massive payloads (e.g. 12MB - 20MB base64 strings).
+ * Firestore strictly limits document size to 1,048,576 bytes.
+ */
+export const sanitizeForFirestore = (prod: any): any => {
+  const sanitized = { ...prod };
+  // Never put raw base64 data URLs exceeding 150KB into a Firestore document
+  if (typeof sanitized.pdfUrl === 'string' && sanitized.pdfUrl.startsWith('data:') && sanitized.pdfUrl.length > 150000) {
+    sanitized.pdfUrl = '';
+  }
+  if (typeof sanitized.coverImage === 'string' && sanitized.coverImage.startsWith('data:') && sanitized.coverImage.length > 250000) {
+    sanitized.coverImage = '';
+  }
+  if (Array.isArray(sanitized.samplePages)) {
+    sanitized.samplePages = sanitized.samplePages.filter(
+      (p: string) => typeof p === 'string' && (!p.startsWith('data:') || p.length < 250000)
+    );
+  }
+  if (Array.isArray(sanitized.previewImages)) {
+    sanitized.previewImages = sanitized.previewImages.filter(
+      (p: string) => typeof p === 'string' && (!p.startsWith('data:') || p.length < 250000)
+    );
+  }
+  return sanitized;
+};
 
 export const DEFAULT_HERO_CONFIG: HeroBannerConfig = {
   backgroundImage: '',
@@ -378,19 +403,13 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     let unsubCoupons: (() => void) | null = null;
 
     async function initRealtimeSync() {
-      // Ensure anonymous auth is initialized for Firestore operations
-      try {
-        if (!auth.currentUser) {
-          await signInAnonymously(auth);
-        }
-      } catch (authErr) {
-        console.warn('Anonymous auth sync notice:', authErr);
-      }
-
-      // Initial server sync
+      // Initial server sync with 3s timeout
       let serverProducts: Product[] = [];
       try {
-        const res = await fetch('/api/products');
+        const controller = new AbortController();
+        const tId = setTimeout(() => controller.abort(), 3000);
+        const res = await fetch('/api/products', { signal: controller.signal });
+        clearTimeout(tId);
         if (res.ok) {
           const list: Product[] = await res.json();
           if (Array.isArray(list)) serverProducts = list;
@@ -405,30 +424,16 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
             const firestoreProducts: Product[] = [];
             snapshot.forEach((d) => firestoreProducts.push(d.data() as Product));
 
-            // Firestore is the supreme cloud authority for all custom/uploaded products
+            // Merge server and Firestore items
             const customMap = new Map<string, Product>();
-
-            // First add any server items
             serverProducts.forEach((p) => customMap.set(p.id, p));
-
-            // Overwrite / add Firestore items
             firestoreProducts.forEach((p) => customMap.set(p.id, p));
 
-            // If a custom product was deleted from Firestore and server has 0 docs,
-            // check if any document in server is absent from Firestore
-            if (firestoreProducts.length === 0) {
-              // Cloud has 0 custom products, clear custom products from local server too!
-              serverProducts.forEach((sp) => {
-                fetch(`/api/products/${sp.id}`, { method: 'DELETE' }).catch(() => {});
-              });
-              customMap.clear();
-            } else {
-              // Only keep custom products that exist in the active Firestore snapshot
+            if (firestoreProducts.length > 0) {
               const activeFirestoreIds = new Set(firestoreProducts.map((p) => p.id));
               Array.from(customMap.keys()).forEach((k) => {
                 if (k.startsWith('pdf-') && !activeFirestoreIds.has(k)) {
                   customMap.delete(k);
-                  fetch(`/api/products/${k}`, { method: 'DELETE' }).catch(() => {});
                 }
               });
             }
@@ -506,30 +511,37 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
       id: newId,
       createdAt: new Date().toISOString()
     };
-    // Put immediately at index 0 so it instantly shows up on website
+
+    // 1. Instantly update UI state so product immediately shows on website
     setProducts((prev) => [newProduct, ...prev.filter((p) => p.id !== newId)]);
 
-    // 1. Save to server database
+    // 2. Fast background sync to server database with 2.5s timeout
     try {
-      await fetch('/api/products', {
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 2500);
+      fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newProduct)
-      });
+        body: JSON.stringify(newProduct),
+        signal: controller.signal
+      })
+        .catch((e) => console.warn('Server product save notice:', e))
+        .finally(() => clearTimeout(tId));
+    } catch {}
+
+    // 3. Fast sync to Firestore with timeout & payload sanitization (protects 1MB limit)
+    try {
+      const sanitized = sanitizeForFirestore(newProduct);
+      const writePromise = setDoc(doc(db, 'products', newId), sanitized);
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Firestore write timeout')), 2500)
+      );
+      await Promise.race([writePromise, timeoutPromise]);
+      console.log('✓ Product published to Firestore:', newId);
     } catch (e) {
-      console.warn('Server product save notice:', e);
+      console.warn('Firestore write notice (non-fatal):', e);
     }
 
-    // 2. Save to Firestore with auth guarantee
-    try {
-      if (!auth.currentUser) {
-        await signInAnonymously(auth);
-      }
-      await setDoc(doc(db, 'products', newId), newProduct);
-      console.log('Product published to Firestore successfully:', newId);
-    } catch (e) {
-      console.warn('Firestore write notice:', e);
-    }
     return newId;
   };
 
@@ -547,21 +559,28 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     if (fullUpdatedProduct) {
       try {
-        await fetch('/api/products', {
+        const controller = new AbortController();
+        const tId = setTimeout(() => controller.abort(), 2500);
+        fetch('/api/products', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(fullUpdatedProduct)
-        });
-      } catch (e) {}
-    }
+          body: JSON.stringify(fullUpdatedProduct),
+          signal: controller.signal
+        })
+          .catch(() => {})
+          .finally(() => clearTimeout(tId));
+      } catch {}
 
-    try {
-      if (!auth.currentUser) {
-        await signInAnonymously(auth);
+      try {
+        const sanitized = sanitizeForFirestore(updated);
+        const writePromise = setDoc(doc(db, 'products', id), sanitized, { merge: true });
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Firestore update timeout')), 2500)
+        );
+        await Promise.race([writePromise, timeoutPromise]);
+      } catch (e) {
+        console.warn('Firestore update notice (non-fatal):', e);
       }
-      await setDoc(doc(db, 'products', id), updated, { merge: true });
-    } catch (e) {
-      console.warn('Firestore update failed:', e);
     }
   };
 
@@ -569,16 +588,21 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setProducts((prev) => prev.filter((p) => p.id !== id));
 
     try {
-      await fetch(`/api/products/${id}`, { method: 'DELETE' });
-    } catch (e) {}
+      const controller = new AbortController();
+      const tId = setTimeout(() => controller.abort(), 2000);
+      fetch(`/api/products/${id}`, { method: 'DELETE', signal: controller.signal })
+        .catch(() => {})
+        .finally(() => clearTimeout(tId));
+    } catch {}
 
     try {
-      if (!auth.currentUser) {
-        await signInAnonymously(auth);
-      }
-      await deleteDoc(doc(db, 'products', id));
+      const deletePromise = deleteDoc(doc(db, 'products', id));
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Firestore delete timeout')), 2000)
+      );
+      await Promise.race([deletePromise, timeoutPromise]);
     } catch (e) {
-      console.warn('Firestore delete failed:', e);
+      console.warn('Firestore delete notice (non-fatal):', e);
     }
   };
 
