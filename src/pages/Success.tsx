@@ -17,6 +17,7 @@ import { Footer } from '../components/Footer';
 import { useProducts } from '../context/ProductContext';
 import { RealWhatsAppIcon } from '../components/WhatsAppFloatingButton';
 import { generateProductPdf, downloadPdfBlob } from '../utils/pdfGenerator';
+import { formatCloudPdfUrl, isValidCloudPdfUrl, getOriginalPdfLocally } from '../utils/pdfStorageApi';
 
 export default function Success() {
   const { orderId } = useParams<{ orderId: string }>();
@@ -121,7 +122,18 @@ export default function Success() {
     const cleanTitle = (product?.title || activeOrder?.productTitle || 'PDF_Master_Document').replace(/[^a-zA-Z0-9_-]/g, '_');
 
     try {
-      // Priority 1: Check in-memory / local custom uploaded PDF
+      // 1. Check local binary cache for the exact original file
+      if (product?.id) {
+        const localCached = await getOriginalPdfLocally(product.id);
+        if (localCached && localCached.blob) {
+          downloadPdfBlob(localCached.blob, `${cleanTitle}.pdf`);
+          setDownloading(false);
+          setDownloadSuccess(true);
+          return;
+        }
+      }
+
+      // 2. Check in-memory custom uploaded PDF
       const customData = product?.id ? getCustomPdfFile(product.id) : null;
       if (customData && customData.startsWith('data:')) {
         const link = document.createElement('a');
@@ -135,30 +147,13 @@ export default function Success() {
         return;
       }
 
-      const targetUrl = product?.pdfUrl || '';
+      const rawTargetUrl = product?.pdfUrl || '';
 
-      // Priority 2: Base64 Data URL (stored in product)
-      if (targetUrl.startsWith('data:')) {
+      // 3. Direct Permanent Cloud Link (Google Drive, Cloudinary, Dropbox, CDN)
+      if (isValidCloudPdfUrl(rawTargetUrl)) {
+        const directUrl = formatCloudPdfUrl(rawTargetUrl);
         const link = document.createElement('a');
-        link.href = targetUrl;
-        link.download = `${cleanTitle}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setDownloading(false);
-        setDownloadSuccess(true);
-        return;
-      }
-
-      // Priority 3: Direct External Cloud Link (Google Drive, Dropbox, Cloud Storage)
-      if (
-        (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) &&
-        !targetUrl.includes('/api/') &&
-        !targetUrl.includes(window.location.host)
-      ) {
-        // Formatted Google Drive or direct file
-        const link = document.createElement('a');
-        link.href = targetUrl;
+        link.href = directUrl;
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
         link.download = `${cleanTitle}.pdf`;
@@ -170,10 +165,10 @@ export default function Success() {
         return;
       }
 
-      // Priority 4: Server File Stream if running fullstack Node server
-      if (targetUrl && targetUrl.startsWith('/api/')) {
+      // 4. Server File Stream if running with fullstack Node server
+      if (rawTargetUrl && rawTargetUrl.startsWith('/api/')) {
         try {
-          const res = await fetch(targetUrl);
+          const res = await fetch(rawTargetUrl);
           if (res.ok && res.headers.get('content-type')?.includes('application/pdf')) {
             const blob = await res.blob();
             downloadPdfBlob(blob, `${cleanTitle}.pdf`);
@@ -184,48 +179,20 @@ export default function Success() {
         } catch {}
       }
 
-      // Priority 5 (BULLETPROOF VERCEL CLIENT GENERATOR):
-      // Generates an authentic, high-res PDF with cover, verified license certificate,
-      // and all drawing sheets / sample pages directly in the browser!
-      // This NEVER fails, never 404s, and works 100% on Android Chrome.
-      const currentProduct = product || {
-        id: activeOrder?.productId || 'drawing-sheet',
-        title: activeOrder?.productTitle || 'Engineering Drawing Sheet',
-        category: 'Drawing & Study Material',
-        price: activeOrder?.amount || 20,
-        oldPrice: 40,
-        rating: 5,
-        reviewsCount: 1,
-        coverImage: activeOrder?.productCover || '',
-        description: 'Official verified drawing sheet and guide unlocked upon purchase.',
-        highlights: ['Verified Original Document', 'Lifetime License Granted', 'High Resolution Vector Format'],
-        features: ['Print-ready A4 Layout', 'Direct mobile & desktop compatibility'],
-        tableOfContents: [{ chapter: 'Sheet 1', title: 'Complete Drawing Sheet & Specifications', pages: '01' }],
-        previewImages: [],
-        samplePages: [],
-        videos: [],
-        reviews: [],
-        faqs: [],
-        pdfPagesCount: 1,
-        fileSize: '1.2 MB',
-        language: 'Hindi + English'
-      };
-
-      const { blob, filename } = await generateProductPdf(currentProduct, activeOrder || { id: orderId });
-      downloadPdfBlob(blob, filename);
+      // 5. If no cloud link was set yet by admin, prompt direct delivery on WhatsApp
       setDownloading(false);
+      const waText = encodeURIComponent(
+        `Hi PDF Master India, I just completed Payment for "${product?.title || activeOrder?.productTitle || 'PDF'}" (Order ID: ${activeOrder?.id || orderId}, Payment ID: ${activeOrder?.razorpayPaymentId || 'Verified'}). Please send my original PDF file here on WhatsApp.`
+      );
+      window.open(`https://wa.me/917079988808?text=${waText}`, '_blank');
       setDownloadSuccess(true);
     } catch (e) {
-      console.warn('PDF download generation notice:', e);
-      // Emergency fallback
-      try {
-        const { blob, filename } = await generateProductPdf(product, activeOrder || { id: orderId });
-        downloadPdfBlob(blob, filename);
-        setDownloadSuccess(true);
-      } catch (err2) {
-        alert('Download error. Please click "Receive on WhatsApp" to get your PDF copy directly!');
-      }
+      console.warn('PDF download notice:', e);
       setDownloading(false);
+      const waText = encodeURIComponent(
+        `Hi PDF Master India, I need help downloading "${product?.title || activeOrder?.productTitle || 'PDF'}" (Order ID: ${activeOrder?.id || orderId}). Please send my file directly on WhatsApp.`
+      );
+      window.open(`https://wa.me/917079988808?text=${waText}`, '_blank');
     }
   };
 

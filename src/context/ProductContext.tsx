@@ -5,27 +5,55 @@ import { db, auth } from '../firebase';
 import { collection, getDocs, setDoc, doc, deleteDoc, getDoc, onSnapshot } from 'firebase/firestore';
 
 /**
+ * Deep cleans an object recursively, removing any undefined properties which
+ * Firestore rejects with 'Function setDoc() called with invalid data. Unsupported field value: undefined'.
+ */
+export const cleanForFirestore = (obj: any): any => {
+  if (obj === undefined) return null;
+  if (obj === null || typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) {
+    return obj.map(cleanForFirestore).filter((v) => v !== undefined);
+  }
+  const cleaned: Record<string, any> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      cleaned[key] = cleanForFirestore(value);
+    }
+  }
+  return cleaned;
+};
+
+/**
  * Protects Firestore and LocalStorage from massive payloads (e.g. 12MB - 20MB base64 strings).
  * Firestore strictly limits document size to 1,048,576 bytes.
  */
 export const sanitizeForFirestore = (prod: any): any => {
-  const sanitized = { ...prod };
+  const cleaned = cleanForFirestore(prod);
+  const sanitized = { ...cleaned };
+
   // Never put raw base64 data URLs exceeding 150KB into a Firestore document for PDFs
   if (typeof sanitized.pdfUrl === 'string' && sanitized.pdfUrl.startsWith('data:') && sanitized.pdfUrl.length > 150000) {
     sanitized.pdfUrl = '';
   }
-  // Allow optimized Web JPEG covers up to 500KB (typically ~45KB)
-  if (typeof sanitized.coverImage === 'string' && sanitized.coverImage.startsWith('data:') && sanitized.coverImage.length > 500000) {
+  // Never put transient session-only blob: URLs into Firestore as they break across devices
+  if (typeof sanitized.pdfUrl === 'string' && sanitized.pdfUrl.startsWith('blob:')) {
+    sanitized.pdfUrl = '';
+  }
+  // Allow optimized Web JPEG covers up to 600KB (typically ~35KB - 50KB)
+  if (typeof sanitized.coverImage === 'string' && sanitized.coverImage.startsWith('data:') && sanitized.coverImage.length > 600000) {
+    sanitized.coverImage = '';
+  }
+  if (typeof sanitized.coverImage === 'string' && sanitized.coverImage.startsWith('blob:')) {
     sanitized.coverImage = '';
   }
   if (Array.isArray(sanitized.samplePages)) {
     sanitized.samplePages = sanitized.samplePages.filter(
-      (p: string) => typeof p === 'string' && (!p.startsWith('data:') || p.length < 350000)
+      (p: string) => typeof p === 'string' && !p.startsWith('blob:') && (!p.startsWith('data:') || p.length < 350000)
     );
   }
   if (Array.isArray(sanitized.previewImages)) {
     sanitized.previewImages = sanitized.previewImages.filter(
-      (p: string) => typeof p === 'string' && (!p.startsWith('data:') || p.length < 350000)
+      (p: string) => typeof p === 'string' && !p.startsWith('blob:') && (!p.startsWith('data:') || p.length < 350000)
     );
   }
   return sanitized;

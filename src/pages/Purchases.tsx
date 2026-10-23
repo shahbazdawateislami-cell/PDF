@@ -16,6 +16,7 @@ import { Footer } from '../components/Footer';
 import { useProducts } from '../context/ProductContext';
 import { Product } from '../types';
 import { generateProductPdf, downloadPdfBlob } from '../utils/pdfGenerator';
+import { formatCloudPdfUrl, isValidCloudPdfUrl, getOriginalPdfLocally } from '../utils/pdfStorageApi';
 
 export default function Purchases() {
   const { orders, products, logDownload, getCustomPdfFile } = useProducts();
@@ -25,7 +26,7 @@ export default function Purchases() {
   const handleDownload = async (orderId: string, productId: string, title: string) => {
     await logDownload(orderId, productId, title);
 
-    setDownloadMsg(`Preparing secure PDF for "${title}"...`);
+    setDownloadMsg(`Preparing PDF for "${title}"...`);
     const cleanName = (title || 'PDF_Master_Guide').replace(/[^a-zA-Z0-9_-]/g, '_');
     const matchedOrder = orders.find((o) => o.id === orderId);
     const prod =
@@ -34,7 +35,18 @@ export default function Purchases() {
       null;
 
     try {
-      // 1. Check in-memory custom uploaded PDF
+      // 1. Check local binary cache for the exact original file
+      if (productId) {
+        const localCached = await getOriginalPdfLocally(productId);
+        if (localCached && localCached.blob) {
+          downloadPdfBlob(localCached.blob, `${cleanName}.pdf`);
+          setDownloadMsg(`✓ "${title}" downloaded successfully!`);
+          setTimeout(() => setDownloadMsg(null), 3500);
+          return;
+        }
+      }
+
+      // 2. Check in-memory custom uploaded PDF
       const customData = productId ? getCustomPdfFile(productId) : null;
       if (customData && customData.startsWith('data:')) {
         const link = document.createElement('a');
@@ -50,27 +62,11 @@ export default function Purchases() {
 
       const downloadTarget = prod?.pdfUrl || '';
 
-      // 2. Base64 Data URL
-      if (downloadTarget.startsWith('data:')) {
+      // 3. Direct Permanent Cloud URL (Google Drive, Cloudinary, Dropbox, etc.)
+      if (isValidCloudPdfUrl(downloadTarget)) {
+        const directUrl = formatCloudPdfUrl(downloadTarget);
         const link = document.createElement('a');
-        link.href = downloadTarget;
-        link.download = `${cleanName}.pdf`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setDownloadMsg(`✓ "${title}" downloaded successfully!`);
-        setTimeout(() => setDownloadMsg(null), 3500);
-        return;
-      }
-
-      // 3. Direct External Cloud URL (Google Drive, Dropbox, etc.)
-      if (
-        (downloadTarget.startsWith('http://') || downloadTarget.startsWith('https://')) &&
-        !downloadTarget.includes('/api/') &&
-        !downloadTarget.includes(window.location.host)
-      ) {
-        const link = document.createElement('a');
-        link.href = downloadTarget;
+        link.href = directUrl;
         link.target = '_blank';
         link.rel = 'noopener noreferrer';
         link.download = `${cleanName}.pdf`;
@@ -96,45 +92,20 @@ export default function Purchases() {
         } catch {}
       }
 
-      // 5. Client-side Authentic PDF Generation (100% works on Vercel with zero 404s)
-      const targetProduct: Product = prod || {
-        id: productId || 'item-pdf',
-        title: title || 'Purchased Document',
-        category: 'Study Material & Drawings',
-        price: matchedOrder?.amount || 20,
-        oldPrice: 40,
-        rating: 5,
-        reviewsCount: 1,
-        coverImage: matchedOrder?.productCover || '',
-        description: 'Official digital document purchased and licensed on aldahr.online.',
-        highlights: ['Verified Original Document', 'Lifetime License Granted', 'Print Ready Format'],
-        features: ['Print-ready A4 Layout', 'Direct mobile & desktop compatibility'],
-        tableOfContents: [{ chapter: 'Sheet 1', title: 'Complete Drawing Sheet & Specifications', pages: '01' }],
-        previewImages: [],
-        samplePages: [],
-        videos: [],
-        reviews: [],
-        faqs: [],
-        pdfPagesCount: 1,
-        fileSize: '1.2 MB',
-        language: 'Hindi + English'
-      };
-
-      const { blob, filename } = await generateProductPdf(targetProduct, matchedOrder || { id: orderId });
-      downloadPdfBlob(blob, filename);
-      setDownloadMsg(`✓ "${title}" downloaded successfully!`);
-      setTimeout(() => setDownloadMsg(null), 3500);
+      // 5. If no cloud link was set yet, open WhatsApp for direct delivery of original file
+      const waText = encodeURIComponent(
+        `Hi PDF Master India, I purchased "${title}" (Order ID: ${orderId}). Please send my original PDF copy directly here.`
+      );
+      window.open(`https://wa.me/917079988808?text=${waText}`, '_blank');
+      setDownloadMsg(`✓ WhatsApp support opened for instant file delivery!`);
+      setTimeout(() => setDownloadMsg(null), 5000);
     } catch (e) {
       console.warn('Purchases PDF download error:', e);
-      try {
-        const fallbackProd = prod || products[0];
-        const { blob, filename } = await generateProductPdf(fallbackProd, matchedOrder);
-        downloadPdfBlob(blob, filename);
-        setDownloadMsg(`✓ "${title}" downloaded successfully!`);
-        setTimeout(() => setDownloadMsg(null), 3500);
-      } catch (err2) {
-        setDownloadMsg('⚠️ Could not generate PDF. Please contact WhatsApp support below.');
-      }
+      const waText = encodeURIComponent(
+        `Hi PDF Master India, I need help downloading "${title}" (Order ID: ${orderId}). Please send my file directly on WhatsApp.`
+      );
+      window.open(`https://wa.me/917079988808?text=${waText}`, '_blank');
+      setDownloadMsg('✓ WhatsApp support opened for assistance.');
     }
   };
 

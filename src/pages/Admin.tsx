@@ -45,6 +45,15 @@ import { useProducts } from '../context/ProductContext';
 import { useAuth } from '../context/AuthContext';
 import { Product, Bundle, HeroStackedCard, HeroBannerConfig, Coupon } from '../types';
 import { createBookCoverSvg, createSamplePageSvg } from '../data/coverImages';
+import {
+  getPdfStorageConfig,
+  savePdfStorageConfig,
+  formatCloudPdfUrl,
+  isValidCloudPdfUrl,
+  uploadPdfToCloudinary,
+  storeOriginalPdfLocally,
+  CloudinaryConfig
+} from '../utils/pdfStorageApi';
 
 export default function Admin() {
   const navigate = useNavigate();
@@ -356,6 +365,108 @@ export default function Admin() {
       showNotify('⚠️ Server se connect karne mein error aaya');
     } finally {
       setIsSavingKeys(false);
+    }
+  };
+
+  // Cloudinary / PDF Cloud Storage API State
+  const [cloudinaryCloudName, setCloudinaryCloudName] = useState('');
+  const [cloudinaryUploadPreset, setCloudinaryUploadPreset] = useState('');
+  const [isSavingPdfStorage, setIsSavingPdfStorage] = useState(false);
+  const [testGdriveUrl, setTestGdriveUrl] = useState('');
+  const [testGdriveResult, setTestGdriveResult] = useState('');
+
+  useEffect(() => {
+    const cfg = getPdfStorageConfig();
+    if (cfg.cloudName) setCloudinaryCloudName(cfg.cloudName);
+    if (cfg.uploadPreset) setCloudinaryUploadPreset(cfg.uploadPreset);
+  }, []);
+
+  const handleSavePdfStorage = (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingPdfStorage(true);
+    savePdfStorageConfig({
+      cloudName: cloudinaryCloudName.trim(),
+      uploadPreset: cloudinaryUploadPreset.trim()
+    });
+    setIsSavingPdfStorage(false);
+    showNotify('✓ PDF Cloud Storage API settings safalta-poorvak save ho gayi!');
+  };
+
+  const handleTestGoogleDriveLink = () => {
+    if (!testGdriveUrl.trim()) {
+      setTestGdriveResult('⚠️ Pehle Google Drive link paste karein');
+      return;
+    }
+    const converted = formatCloudPdfUrl(testGdriveUrl.trim());
+    setTestGdriveResult(`✓ Direct link ready! Testing in new tab...`);
+    window.open(converted, '_blank');
+  };
+
+  // Quick Attach PDF Modal State
+  const [quickPdfModalTarget, setQuickPdfModalTarget] = useState<Product | null>(null);
+  const [quickPdfLink, setQuickPdfLink] = useState('');
+  const [quickPdfFileName, setQuickPdfFileName] = useState('');
+  const [isSavingQuickPdf, setIsSavingQuickPdf] = useState(false);
+  const [quickUploadProgress, setQuickUploadProgress] = useState(0);
+  const [isQuickUploadingPdf, setIsQuickUploadingPdf] = useState(false);
+  const quickPdfFileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleOpenQuickPdfModal = (p: Product) => {
+    setQuickPdfModalTarget(p);
+    setQuickPdfLink(p.pdfUrl || '');
+    setQuickPdfFileName(p.pdfFileName || `${p.title}.pdf`);
+    setQuickUploadProgress(0);
+    setIsQuickUploadingPdf(false);
+  };
+
+  const handleSaveQuickPdf = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!quickPdfModalTarget) return;
+    const finalFormatted = formatCloudPdfUrl(quickPdfLink.trim());
+    setIsSavingQuickPdf(true);
+    try {
+      await updateProduct(quickPdfModalTarget.id, {
+        pdfUrl: finalFormatted,
+        pdfFileName: quickPdfFileName.trim() || `${quickPdfModalTarget.title}.pdf`
+      });
+      showNotify(`✓ PDF File Link for "${quickPdfModalTarget.title}" saved successfully!`);
+      setQuickPdfModalTarget(null);
+    } catch (err: any) {
+      showNotify(`⚠️ Error: ${err?.message || 'Could not save PDF link'}`);
+    } finally {
+      setIsSavingQuickPdf(false);
+    }
+  };
+
+  const handleQuickPdfFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !quickPdfModalTarget) return;
+    const storageCfg = getPdfStorageConfig();
+    const activeCloudName = cloudinaryCloudName.trim() || storageCfg.cloudName.trim();
+    const activeUploadPreset = cloudinaryUploadPreset.trim() || storageCfg.uploadPreset.trim();
+
+    if (!activeCloudName || !activeUploadPreset) {
+      showNotify('💡 Cloudinary API configure nahi hai. Kripya Google Drive link paste karein ya API Keys tab me Cloudinary configure karein.');
+      return;
+    }
+
+    setIsQuickUploadingPdf(true);
+    setQuickUploadProgress(5);
+    try {
+      const res = await uploadPdfToCloudinary(
+        file,
+        { cloudName: activeCloudName, uploadPreset: activeUploadPreset },
+        (pct) => setQuickUploadProgress(pct)
+      );
+      if (res && res.url) {
+        setQuickPdfLink(res.url);
+        setQuickPdfFileName(res.fileName || file.name);
+        showNotify(`✓ PDF "${file.name}" Cloudinary CDN par upload ho gaya! Save karne ke liye "Save PDF Link" dabayein.`);
+      }
+    } catch (err: any) {
+      showNotify(`⚠️ Cloud upload error: ${err.message || 'Failed'}`);
+    } finally {
+      setIsQuickUploadingPdf(false);
     }
   };
 
@@ -743,13 +854,54 @@ export default function Admin() {
         setFormCategory('Islamic Books');
       }
 
+      // Always cache original binary locally in IndexedDB first
+      try {
+        await storeOriginalPdfLocally(targetProductId, file, file.name);
+      } catch (idbErr) {
+        console.warn('IndexedDB cache notice:', idbErr);
+      }
+
+      // Check if Cloudinary Storage API is configured
+      const storageCfg = getPdfStorageConfig();
+      const activeCloudName = cloudinaryCloudName.trim() || storageCfg.cloudName.trim();
+      const activeUploadPreset = cloudinaryUploadPreset.trim() || storageCfg.uploadPreset.trim();
+
+      if (activeCloudName && activeUploadPreset) {
+        setUploadStatusText(`Cloudinary API par PDF upload ho raha hai...`);
+        try {
+          const cloudRes = await uploadPdfToCloudinary(
+            file,
+            { cloudName: activeCloudName, uploadPreset: activeUploadPreset },
+            (pct) => setUploadProgressPercent(pct)
+          );
+          if (cloudRes && cloudRes.url) {
+            setUploadedPdfUrl(cloudRes.url);
+            setUploadedPdfName(cloudRes.fileName || file.name);
+            setUploadStatusText(`✓ PDF "${file.name}" Cloudinary CDN par upload ho gaya!`);
+            showNotify(`✓ PDF "${file.name}" permanent cloud par upload ho gaya!`);
+            setIsUploadingPdf(false);
+            return;
+          }
+        } catch (cloudErr: any) {
+          console.warn('Cloudinary upload notice:', cloudErr);
+          showNotify(`⚠️ Cloudinary API notice: ${cloudErr.message || 'Upload error'}`);
+        }
+      }
+
+      // Fallback: Try server upload endpoint if running on fullstack Node
       try {
         const uploadRes = await uploadFileToServer(file, targetProductId, 'pdf');
-        if (uploadRes && uploadRes.fileUrl) {
+        if (uploadRes && uploadRes.fileUrl && !uploadRes.fileUrl.startsWith('blob:')) {
           setUploadedPdfUrl(uploadRes.fileUrl);
           setUploadedPdfName(uploadRes.fileName || file.name);
-          setUploadStatusText(`✓ PDF "${file.name}" uploaded! Niche "Upload & Publish PDF" par click karke live karein.`);
+          setUploadStatusText(`✓ PDF "${file.name}" server par upload ho gaya!`);
           showNotify(`✓ PDF uploaded! Live karne ke liye "Publish PDF" button dabayein.`);
+        } else {
+          // On static hosting without Cloudinary, advise Google Drive link for 100% reliability
+          setUploadedPdfName(file.name);
+          setUploadStatusText(`File select ho gayi. 100% guaranteed delivery ke liye Google Drive link paste karein.`);
+          showNotify(`💡 12MB-20MB PDF ke liye Google Drive link paste karein (bina kisi file size limit ke chalega).`);
+          setPdfUploadSource('url');
         }
       } catch (err: any) {
         console.warn('Immediate PDF upload warning:', err);
@@ -1620,6 +1772,7 @@ export default function Admin() {
                   <tr>
                     <th className="py-3 px-4">Cover</th>
                     <th className="py-3 px-4">Title &amp; Category</th>
+                    <th className="py-3 px-4">PDF File (Customer Download)</th>
                     <th className="py-3 px-4">Price (₹)</th>
                     <th className="py-3 px-4">Rating</th>
                     <th className="py-3 px-4">Pages</th>
@@ -1651,6 +1804,43 @@ export default function Admin() {
                           )}
                         </div>
                       </td>
+                      <td className="py-3 px-4">
+                        {isValidCloudPdfUrl(p.pdfUrl) ? (
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                <Check size={11} className="stroke-[3]" /> Cloud PDF Active
+                              </span>
+                              <a
+                                href={formatCloudPdfUrl(p.pdfUrl || '')}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[10px] text-blue-600 hover:text-blue-800 font-bold underline flex items-center gap-0.5"
+                                title="Test direct download in new tab"
+                              >
+                                <ExternalLink size={10} /> Test
+                              </a>
+                            </div>
+                            <div className="text-[10px] text-gray-500 mt-0.5 font-mono truncate max-w-[150px]">
+                              {p.pdfFileName || 'Ready for download'}
+                            </div>
+                          </div>
+                        ) : (
+                          <div>
+                            <button
+                              type="button"
+                              onClick={() => handleOpenQuickPdfModal(p)}
+                              className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl text-[10px] font-black bg-amber-100 hover:bg-amber-200 text-amber-900 border border-amber-300 transition-all cursor-pointer shadow-2xs"
+                              title="Attach real PDF file or Google Drive link"
+                            >
+                              <AlertTriangle size={11} className="text-amber-700" /> ⚠️ Attach PDF File
+                            </button>
+                            <div className="text-[10px] text-amber-700 font-semibold mt-0.5">
+                              Link missing • WhatsApp fallback
+                            </div>
+                          </div>
+                        )}
+                      </td>
                       <td className="py-3 px-4 font-bold text-gray-900">
                         ₹{p.price} <span className="text-[10px] text-gray-400 line-through">₹{p.oldPrice}</span>
                       </td>
@@ -1664,6 +1854,14 @@ export default function Admin() {
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
+                            onClick={() => handleOpenQuickPdfModal(p)}
+                            className="p-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 transition-colors font-bold flex items-center gap-1 text-[11px] px-2.5 border border-indigo-200 cursor-pointer"
+                            title="Attach or Update PDF File Link"
+                          >
+                            <FileText size={13} className="text-indigo-600" /> PDF Link
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => {
                               const base = window.location.origin;
                               setAdLinkModalData({
@@ -1673,7 +1871,7 @@ export default function Admin() {
                                 type: 'product'
                               });
                             }}
-                            className="p-1.5 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-colors font-extrabold flex items-center gap-1 text-[11px] px-2.5 border border-emerald-200"
+                            className="p-1.5 rounded-lg bg-emerald-50 text-emerald-800 hover:bg-emerald-100 transition-colors font-extrabold flex items-center gap-1 text-[11px] px-2.5 border border-emerald-200 cursor-pointer"
                             title="Meta Ads / Facebook & Instagram Ads Link"
                           >
                             <Link2 size={13} className="text-emerald-700" /> 🔗 Ad Link
@@ -1687,14 +1885,14 @@ export default function Admin() {
                           </Link>
                           <button
                             onClick={() => handleOpenEditModal(p)}
-                            className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors font-bold flex items-center gap-1 text-[11px] px-2.5"
+                            className="p-1.5 rounded-lg bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors font-bold flex items-center gap-1 text-[11px] px-2.5 cursor-pointer"
                             title="Edit Product"
                           >
                             <Edit size={13} /> Edit
                           </button>
                           <button
                             onClick={() => setDeleteConfirmTarget({ id: p.id, title: p.title, type: 'product' })}
-                            className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors font-bold flex items-center gap-1 text-[11px] px-2.5"
+                            className="p-1.5 rounded-lg bg-red-50 text-red-600 hover:bg-red-100 transition-colors font-bold flex items-center gap-1 text-[11px] px-2.5 cursor-pointer"
                             title="Delete Product"
                           >
                             <Trash2 size={13} /> Delete
@@ -1705,7 +1903,7 @@ export default function Admin() {
                   ))}
                   {filteredProducts.length === 0 && (
                     <tr>
-                      <td colSpan={6} className="text-center py-8 text-gray-400">
+                      <td colSpan={7} className="text-center py-8 text-gray-400">
                         No products found matching filters.
                       </td>
                     </tr>
@@ -2914,10 +3112,300 @@ export default function Admin() {
                   💡 Note: Testing ke liye aap <span className="font-mono">rzp_test_...</span> keys use kar sakte hain, aur real customer payments lene ke liye <span className="font-mono">rzp_live_...</span> keys dalein.
                 </div>
               </div>
+
+              {/* CLOUD PDF STORAGE & DIRECT UPLOAD API SETTINGS */}
+              <div className="bg-white rounded-2xl border-2 border-indigo-200/90 p-6 space-y-5 shadow-xs">
+                <div className="flex items-center gap-3 border-b border-indigo-100 pb-4">
+                  <div className="w-10 h-10 rounded-xl bg-indigo-600 text-white flex items-center justify-center font-bold">
+                    <UploadCloud size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-base font-black text-gray-950">
+                      Cloud PDF Storage &amp; Upload API (پی ڈی ایف کلاؤڈ اسٹوریج اے پی آئی)
+                    </h4>
+                    <p className="text-xs text-gray-500">
+                      Badi 10MB, 20MB, ya 50MB PDF files ko direct internet par store karne aur customer download ke liye connect karein.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Option 1: Google Drive Direct Engine (100% Free & Unlimited 15GB) */}
+                <div className="bg-emerald-50/60 p-4 rounded-xl border border-emerald-200 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-xs text-emerald-950 flex items-center gap-1.5">
+                      <Check size={14} className="text-emerald-600 font-black" />
+                      Option 1: Google Drive Direct Engine (Recommended for 10MB-100MB PDFs)
+                    </span>
+                    <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                      Zero Setup • 100% Free
+                    </span>
+                  </div>
+                  <p className="text-xs text-emerald-900 leading-relaxed">
+                    Apni Drawing Sheet ya PDF ko apne <strong>Google Drive</strong> par upload karein, sharing option me <strong>"Anyone with the link"</strong> set karein aur link copy karke Product me paste karein. Website automatically direct instant-download link bana degi!
+                  </p>
+
+                  {/* Google Drive Link Converter & Tester */}
+                  <div className="pt-1 space-y-2">
+                    <label className="block text-[11px] font-bold text-emerald-950">
+                      Google Drive Link Test Karein (Paste &amp; Verify):
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={testGdriveUrl}
+                        onChange={(e) => setTestGdriveUrl(e.target.value)}
+                        placeholder="e.g. https://drive.google.com/file/d/1A2B3C.../view?usp=sharing"
+                        className="flex-1 px-3 py-2 bg-white rounded-lg border border-emerald-300 text-xs font-mono outline-none focus:ring-1 focus:ring-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={handleTestGoogleDriveLink}
+                        className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white font-bold text-xs rounded-lg transition-colors flex items-center gap-1.5 shrink-0 cursor-pointer"
+                      >
+                        <ExternalLink size={13} /> Test Download Link
+                      </button>
+                    </div>
+                    {testGdriveResult && (
+                      <p className="text-[11px] font-bold text-emerald-800 bg-white/80 p-2 rounded-lg border border-emerald-200">
+                        {testGdriveResult}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Option 2: Cloudinary Direct Upload API */}
+                <form onSubmit={handleSavePdfStorage} className="space-y-4 pt-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-extrabold text-xs text-gray-900 flex items-center gap-1.5">
+                      <Upload size={14} className="text-indigo-600" />
+                      Option 2: Cloudinary Direct PDF Upload API (For Device Direct Upload)
+                    </span>
+                    <span className="text-[10px] bg-indigo-50 text-indigo-700 font-bold px-2 py-0.5 rounded-full border border-indigo-200">
+                      Permanent Cloud CDN
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Agar aap phone ya PC se direct PDF upload karna chahte hain, toh apna free Cloudinary account connect karein:
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">
+                        Cloudinary Cloud Name
+                      </label>
+                      <input
+                        type="text"
+                        value={cloudinaryCloudName}
+                        onChange={(e) => setCloudinaryCloudName(e.target.value)}
+                        placeholder="e.g. your_cloud_name"
+                        className="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">
+                        Upload Preset (Unsigned)
+                      </label>
+                      <input
+                        type="text"
+                        value={cloudinaryUploadPreset}
+                        onChange={(e) => setCloudinaryUploadPreset(e.target.value)}
+                        placeholder="e.g. ml_default ya pdf_upload"
+                        className="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono outline-none focus:border-indigo-500"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <a
+                      href="https://cloudinary.com/users/register_free"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-indigo-600 font-bold hover:underline flex items-center gap-1"
+                    >
+                      <ExternalLink size={12} /> Free Cloudinary Account Banayein (25GB Free)
+                    </a>
+                    <button
+                      type="submit"
+                      disabled={isSavingPdfStorage}
+                      className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-sm transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Check size={14} />
+                      <span>{isSavingPdfStorage ? 'Saving...' : 'Save Storage API Settings'}</span>
+                    </button>
+                  </div>
+                </form>
+              </div>
             </div>
           </div>
         )}
       </main>
+
+      {/* QUICK ATTACH PDF MODAL */}
+      {quickPdfModalTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border border-gray-100 animate-scale-in space-y-4">
+            <div className="flex items-start justify-between border-b border-gray-100 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                  <FileText size={20} />
+                </div>
+                <div>
+                  <h3 className="text-sm sm:text-base font-black text-gray-900 line-clamp-1">
+                    Attach Real PDF File
+                  </h3>
+                  <p className="text-xs text-gray-500 font-semibold line-clamp-1">
+                    "{quickPdfModalTarget.title}"
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickPdfModalTarget(null)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveQuickPdf} className="space-y-4">
+              {/* Option A: Google Drive Direct Link (Recommended) */}
+              <div className="bg-emerald-50/70 p-4 rounded-2xl border border-emerald-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
+                    <Check size={14} className="text-emerald-600 stroke-[3]" />
+                    Option A: Google Drive Sharing Link (Recommended)
+                  </span>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full">
+                    100% Free • Unlimited 15GB
+                  </span>
+                </div>
+                <p className="text-xs text-emerald-900 leading-relaxed">
+                  Apne <strong>Google Drive</strong> par Drawing Sheet ya PDF upload karein, share option me <strong>"Anyone with the link"</strong> karein aur link yahan paste karein:
+                </p>
+
+                <div className="space-y-1.5">
+                  <input
+                    type="url"
+                    value={quickPdfLink}
+                    onChange={(e) => {
+                      const val = e.target.value.trim();
+                      const formatted = formatCloudPdfUrl(val);
+                      setQuickPdfLink(formatted);
+                    }}
+                    placeholder="https://drive.google.com/file/d/1A2B3C.../view?usp=sharing"
+                    className="w-full px-3 py-2 bg-white rounded-xl border border-emerald-300 text-xs font-mono outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                  {quickPdfLink && isValidCloudPdfUrl(quickPdfLink) && (
+                    <div className="flex items-center justify-between text-[11px] text-emerald-800 font-bold bg-white/90 p-2 rounded-lg border border-emerald-200">
+                      <span>✓ Ready for 1-click customer download!</span>
+                      <a
+                        href={formatCloudPdfUrl(quickPdfLink)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline flex items-center gap-1 font-semibold"
+                      >
+                        <ExternalLink size={12} /> Test Link Now
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Option B: Direct Device Upload via Cloudinary API */}
+              <div className="bg-indigo-50/60 p-4 rounded-2xl border border-indigo-200 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-indigo-950 flex items-center gap-1.5">
+                    <UploadCloud size={14} className="text-indigo-600" />
+                    Option B: Cloudinary CDN Direct Upload
+                  </span>
+                  <span className="text-[10px] bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded-full">
+                    Direct Device Upload
+                  </span>
+                </div>
+                <p className="text-xs text-indigo-900">
+                  Phone Gallery ya PC se direct original PDF file Cloudinary cloud CDN par bhejein:
+                </p>
+
+                <input
+                  type="file"
+                  ref={quickPdfFileInputRef}
+                  accept=".pdf,application/pdf"
+                  onChange={handleQuickPdfFileUpload}
+                  className="hidden"
+                />
+
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => quickPdfFileInputRef.current?.click()}
+                    disabled={isQuickUploadingPdf}
+                    className="px-3.5 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    <Upload size={14} />
+                    {isQuickUploadingPdf ? 'Uploading...' : 'Select PDF from Device'}
+                  </button>
+
+                  <Link
+                    to="/admin?tab=api-keys"
+                    onClick={() => setQuickPdfModalTarget(null)}
+                    className="text-xs text-indigo-700 hover:underline font-bold"
+                  >
+                    ⚙️ Cloudinary Settings
+                  </Link>
+                </div>
+
+                {isQuickUploadingPdf && (
+                  <div className="w-full mt-2 p-2.5 bg-white rounded-xl border border-indigo-200 space-y-1">
+                    <div className="flex justify-between text-xs font-bold text-indigo-950">
+                      <span>Uploading PDF to Cloudinary...</span>
+                      <span>{quickUploadProgress}%</span>
+                    </div>
+                    <div className="w-full bg-indigo-100 h-2 rounded-full overflow-hidden">
+                      <div
+                        className="bg-indigo-600 h-full rounded-full transition-all duration-150"
+                        style={{ width: `${Math.max(quickUploadProgress, 5)}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* PDF File Name */}
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">
+                  File Download Name:
+                </label>
+                <input
+                  type="text"
+                  value={quickPdfFileName}
+                  onChange={(e) => setQuickPdfFileName(e.target.value)}
+                  placeholder="e.g. Drawing_Sheet_3_Original.pdf"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:border-indigo-500 font-mono"
+                />
+              </div>
+
+              {/* Actions */}
+              <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-gray-100">
+                <button
+                  type="button"
+                  onClick={() => setQuickPdfModalTarget(null)}
+                  className="px-4 py-2.5 rounded-xl border border-gray-300 text-gray-700 font-bold text-xs hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSavingQuickPdf || !quickPdfLink.trim()}
+                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs shadow-md transition-all flex items-center gap-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  <Check size={15} className="stroke-[3]" />
+                  <span>{isSavingQuickPdf ? 'Saving Link...' : '✓ Save PDF Link & Make Live'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* 1. IN-APP DELETE CONFIRMATION MODAL (NO native window.confirm) */}
       {deleteConfirmTarget && (
