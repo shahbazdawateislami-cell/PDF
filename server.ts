@@ -120,7 +120,16 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ limit: '100mb', extended: true }));
 app.use('/uploads', express.static(UPLOADS_DIR, { maxAge: '7d' }));
-app.use('/api/files', express.static(UPLOADS_DIR, { maxAge: '7d' }));
+app.use('/api/files', express.static(UPLOADS_DIR, {
+  maxAge: '7d',
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.pdf')) {
+      const filename = path.basename(filePath);
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(filename)}"`);
+    }
+  }
+}));
 
 const DEFAULT_RAZORPAY_KEY_ID = 'rzp_live_TnGvSxZuZ5aAKf';
 const DEFAULT_RAZORPAY_KEY_SECRET = 'cAvLBUr7MwFWLricuOe7wCqv';
@@ -497,25 +506,45 @@ app.get('/api/download/:orderId', async (req, res) => {
     }
 
     // Check if the purchased product has an actual uploaded PDF file on the server
+    // Check if the purchased product has an actual uploaded PDF file on the server
     const productId = targetProductId || orderData?.productId;
     let customFilePath: string | null = null;
     let customFileName: string | null = null;
 
-    if (productId && fs.existsSync(UPLOADS_DIR)) {
+    if (productId) {
       const prod = prods[productId];
-      if (prod?.pdfUrl && prod.pdfUrl.startsWith('/api/files/')) {
-        const storedName = path.basename(prod.pdfUrl);
-        const fullP = path.join(UPLOADS_DIR, storedName);
-        if (fs.existsSync(fullP)) {
-          customFilePath = fullP;
-          customFileName = prod.pdfFileName || prod.title || 'PDF_Master_Guide.pdf';
+
+      // Check configured pdfUrl in product
+      if (prod?.pdfUrl) {
+        if (prod.pdfUrl.startsWith('/api/files/') || prod.pdfUrl.startsWith('/uploads/')) {
+          const storedName = path.basename(prod.pdfUrl);
+          const fullP = path.join(UPLOADS_DIR, storedName);
+          if (fs.existsSync(fullP)) {
+            customFilePath = fullP;
+            customFileName = prod.pdfFileName || prod.title || 'PDF_Master_Guide.pdf';
+          }
+        } else if (prod.pdfUrl.startsWith('http://') || prod.pdfUrl.startsWith('https://')) {
+          // Direct permanent cloud redirect (Google Drive, Cloudinary, Dropbox)
+          let directCloudUrl = prod.pdfUrl.trim();
+          const driveMatch1 = directCloudUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/);
+          if (driveMatch1 && driveMatch1[1]) {
+            directCloudUrl = `https://drive.google.com/uc?export=download&id=${driveMatch1[1]}`;
+          } else {
+            const driveMatch2 = directCloudUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+            if (directCloudUrl.includes('drive.google.com') && driveMatch2 && driveMatch2[1]) {
+              directCloudUrl = `https://drive.google.com/uc?export=download&id=${driveMatch2[1]}`;
+            }
+          }
+          console.log(`[Download] Redirecting order ${orderId} to cloud PDF: ${directCloudUrl}`);
+          return res.redirect(directCloudUrl);
         }
       }
 
-      if (!customFilePath) {
+      // Check by productId prefix or filename matching in uploads directory
+      if (!customFilePath && fs.existsSync(UPLOADS_DIR)) {
         try {
           const files = fs.readdirSync(UPLOADS_DIR);
-          const matched = files.find(f => f.includes(productId) && f.endsWith('.pdf'));
+          const matched = files.find(f => (f.includes(productId) || f.toLowerCase().replace(/[^a-z0-9]/g, '').includes(productId.toLowerCase().replace(/[^a-z0-9]/g, ''))) && f.endsWith('.pdf'));
           if (matched) {
             customFilePath = path.join(UPLOADS_DIR, matched);
             customFileName = matched;
@@ -531,79 +560,19 @@ app.get('/api/download/:orderId', async (req, res) => {
       return fs.createReadStream(customFilePath).pipe(res);
     }
 
-    // Serve secure valid PDF document stream
+    // If no PDF file is uploaded yet, NEVER generate a fake/synthetic document.
+    // Instead, redirect directly to WhatsApp support with pre-filled order verification details
     const title = orderData?.productTitle || 'PDF Master Guide';
-    const safeTitle = title.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const pdfBuf = generateMinimalPdf(title, orderId, orderData?.customerEmail || 'Customer');
-
-    res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="${orderId}_${safeTitle}.pdf"`);
-    res.send(pdfBuf);
+    const waText = encodeURIComponent(
+      `Hi PDF Master India, I purchased "${title}" (Order ID: ${orderId}). Please send my exact original PDF file directly here on WhatsApp.`
+    );
+    console.log(`[Download Notice] No local PDF file for ${orderId} (${productId}). Redirecting to WhatsApp delivery.`);
+    return res.redirect(`https://wa.me/917079988808?text=${waText}`);
   } catch (err) {
     console.error('Download stream error:', err);
-    res.status(500).json({ error: 'Failed to generate secure download stream' });
+    res.status(500).json({ error: 'Failed to access original PDF file' });
   }
 });
-
-// Helper: Generates a minimal compliant PDF document stream
-function generateMinimalPdf(title: string, orderId: string, email: string): Buffer {
-  const cleanTitle = title.replace(/[^\x20-\x7E]/g, ' ');
-  const cleanOrderId = orderId.replace(/[^\x20-\x7E]/g, ' ');
-  const cleanEmail = email.replace(/[^\x20-\x7E]/g, ' ');
-  const streamContent = `BT
-/F1 18 Tf
-50 740 Td
-(PDF MASTER INDIA - OFFICIAL SECURE DIGITAL DELIVERY) Tj
-/F1 13 Tf
-0 -35 Td
-(Title: ${cleanTitle}) Tj
-0 -22 Td
-(Order ID: ${cleanOrderId}) Tj
-0 -22 Td
-(Customer: ${cleanEmail}) Tj
-0 -22 Td
-(Status: Verified & Paid) Tj
-0 -35 Td
-/F1 11 Tf
-(Thank you for your purchase! This file is authorized for your personal study.) Tj
-0 -20 Td
-(Helpline: support@pdfmaster.in | WhatsApp: +91 70799 88808) Tj
-ET`;
-  const streamLen = Buffer.byteLength(streamContent, 'utf-8');
-  const pdfString = `%PDF-1.4
-1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-2 0 obj
-<< /Type /Pages /Kids [3 0 R] /Count 1 >>
-endobj
-3 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
-endobj
-4 0 obj
-<< /Length ${streamLen} >>
-stream
-${streamContent}
-endstream
-endobj
-5 0 obj
-<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
-endobj
-xref
-0 6
-0000000000 65535 f 
-0000000009 00000 n 
-0000000058 00000 n 
-0000000115 00000 n 
-0000000244 00000 n 
-0000000350 00000 n 
-trailer
-<< /Size 6 /Root 1 0 R >>
-startxref
-450
-%%EOF`;
-  return Buffer.from(pdfString, 'utf-8');
-}
 
 // 6. Direct File Upload Endpoints (FormData, Raw Binary, and Base64 JSON)
 const uploadStorage = multer.diskStorage({
@@ -740,7 +709,9 @@ app.get('/api/files/:filename', (req, res) => {
     const ext = path.extname(filename).toLowerCase();
     if (ext === '.pdf') {
       res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+      const isDownload = req.query.download === '1' || req.query.download === 'true' || req.query.dl === '1';
+      const disposition = isDownload ? 'attachment' : 'inline';
+      res.setHeader('Content-Disposition', `${disposition}; filename="${encodeURIComponent(filename)}"`);
     } else if (ext === '.jpg' || ext === '.jpeg') {
       res.setHeader('Content-Type', 'image/jpeg');
     } else if (ext === '.png') {

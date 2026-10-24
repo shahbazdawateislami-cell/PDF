@@ -441,30 +441,52 @@ export default function Admin() {
   const handleQuickPdfFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !quickPdfModalTarget) return;
+
+    setIsQuickUploadingPdf(true);
+    setQuickUploadProgress(10);
+    showNotify(`⏳ PDF "${file.name}" upload ho raha hai...`);
+
+    // 1. Cache binary locally in IndexedDB
+    try {
+      await storeOriginalPdfLocally(quickPdfModalTarget.id, file, file.name);
+    } catch {}
+
     const storageCfg = getPdfStorageConfig();
     const activeCloudName = cloudinaryCloudName.trim() || storageCfg.cloudName.trim();
     const activeUploadPreset = cloudinaryUploadPreset.trim() || storageCfg.uploadPreset.trim();
 
-    if (!activeCloudName || !activeUploadPreset) {
-      showNotify('💡 Cloudinary API configure nahi hai. Kripya Google Drive link paste karein ya API Keys tab me Cloudinary configure karein.');
-      return;
+    // Option A: If Cloudinary is configured, upload to Cloudinary CDN
+    if (activeCloudName && activeUploadPreset) {
+      try {
+        const res = await uploadPdfToCloudinary(
+          file,
+          { cloudName: activeCloudName, uploadPreset: activeUploadPreset },
+          (pct) => setQuickUploadProgress(pct)
+        );
+        if (res && res.url) {
+          setQuickPdfLink(res.url);
+          setQuickPdfFileName(res.fileName || file.name);
+          showNotify(`✓ PDF "${file.name}" Cloudinary par upload ho gaya! Save karne ke liye "Save PDF Link" dabayein.`);
+          setIsQuickUploadingPdf(false);
+          return;
+        }
+      } catch (err: any) {
+        console.warn('Cloudinary upload fallback to server:', err);
+      }
     }
 
-    setIsQuickUploadingPdf(true);
-    setQuickUploadProgress(5);
+    // Option B: Direct Express Server Upload (holds file in .data/uploads and serves at /api/files/...)
     try {
-      const res = await uploadPdfToCloudinary(
-        file,
-        { cloudName: activeCloudName, uploadPreset: activeUploadPreset },
-        (pct) => setQuickUploadProgress(pct)
-      );
-      if (res && res.url) {
-        setQuickPdfLink(res.url);
+      setQuickUploadProgress(30);
+      const res = await uploadFileToServer(file, quickPdfModalTarget.id, 'pdf');
+      if (res && res.fileUrl) {
+        setQuickUploadProgress(100);
+        setQuickPdfLink(res.fileUrl);
         setQuickPdfFileName(res.fileName || file.name);
-        showNotify(`✓ PDF "${file.name}" Cloudinary CDN par upload ho gaya! Save karne ke liye "Save PDF Link" dabayein.`);
+        showNotify(`✓ PDF "${file.name}" direct server par upload ho gaya! Save karne ke liye "Save PDF Link" dabayein.`);
       }
-    } catch (err: any) {
-      showNotify(`⚠️ Cloud upload error: ${err.message || 'Failed'}`);
+    } catch (serverErr: any) {
+      showNotify(`⚠️ Upload error: ${serverErr?.message || 'Server upload failed'}`);
     } finally {
       setIsQuickUploadingPdf(false);
     }

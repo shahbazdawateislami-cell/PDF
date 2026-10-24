@@ -122,34 +122,32 @@ export default function Success() {
     const cleanTitle = (product?.title || activeOrder?.productTitle || 'PDF_Master_Document').replace(/[^a-zA-Z0-9_-]/g, '_');
 
     try {
-      // 1. Check local binary cache for the exact original file
-      if (product?.id) {
-        const localCached = await getOriginalPdfLocally(product.id);
-        if (localCached && localCached.blob) {
-          downloadPdfBlob(localCached.blob, `${cleanTitle}.pdf`);
-          setDownloading(false);
-          setDownloadSuccess(true);
-          return;
-        }
-      }
-
-      // 2. Check in-memory custom uploaded PDF
-      const customData = product?.id ? getCustomPdfFile(product.id) : null;
-      if (customData && customData.startsWith('data:')) {
+      // 1. Direct Server Uploaded File (/api/files/... or /uploads/...)
+      const rawTargetUrl = product?.pdfUrl || '';
+      if (rawTargetUrl.startsWith('/api/') || rawTargetUrl.startsWith('/uploads/')) {
+        const downloadUrl = `${rawTargetUrl}${rawTargetUrl.includes('?') ? '&' : '?'}download=1`;
         const link = document.createElement('a');
-        link.href = customData;
+        link.href = downloadUrl;
         link.download = `${cleanTitle}.pdf`;
+        link.setAttribute('target', '_self');
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
+
+        try {
+          const res = await fetch(downloadUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            downloadPdfBlob(blob, `${cleanTitle}.pdf`);
+          }
+        } catch {}
+
         setDownloading(false);
         setDownloadSuccess(true);
         return;
       }
 
-      const rawTargetUrl = product?.pdfUrl || '';
-
-      // 3. Direct Permanent Cloud Link (Google Drive, Cloudinary, Dropbox, CDN)
+      // 2. Direct Permanent Cloud Link (Google Drive, Cloudinary, Dropbox, CDN)
       if (isValidCloudPdfUrl(rawTargetUrl)) {
         const directUrl = formatCloudPdfUrl(rawTargetUrl);
         const link = document.createElement('a');
@@ -165,18 +163,23 @@ export default function Success() {
         return;
       }
 
-      // 4. Server File Stream if running with fullstack Node server
-      if (rawTargetUrl && rawTargetUrl.startsWith('/api/')) {
-        try {
-          const res = await fetch(rawTargetUrl);
-          if (res.ok && res.headers.get('content-type')?.includes('application/pdf')) {
-            const blob = await res.blob();
-            downloadPdfBlob(blob, `${cleanTitle}.pdf`);
-            setDownloading(false);
-            setDownloadSuccess(true);
-            return;
-          }
-        } catch {}
+      // 3. Check local binary cache for the exact original file
+      if (product?.id) {
+        const localCached = await getOriginalPdfLocally(product.id);
+        if (localCached && localCached.blob) {
+          downloadPdfBlob(localCached.blob, `${cleanTitle}.pdf`);
+          setDownloading(false);
+          setDownloadSuccess(true);
+          return;
+        }
+      }
+
+      // 4. Server stream fallback endpoint
+      if (activeOrder?.id || orderId) {
+        window.location.href = `/api/download/${activeOrder?.id || orderId}?productId=${product?.id || ''}`;
+        setDownloading(false);
+        setDownloadSuccess(true);
+        return;
       }
 
       // 5. If no cloud link was set yet by admin, prompt direct delivery on WhatsApp

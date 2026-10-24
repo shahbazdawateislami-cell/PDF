@@ -26,7 +26,7 @@ export default function Purchases() {
   const handleDownload = async (orderId: string, productId: string, title: string) => {
     await logDownload(orderId, productId, title);
 
-    setDownloadMsg(`Preparing PDF for "${title}"...`);
+    setDownloadMsg(`Downloading original PDF for "${title}"...`);
     const cleanName = (title || 'PDF_Master_Guide').replace(/[^a-zA-Z0-9_-]/g, '_');
     const matchedOrder = orders.find((o) => o.id === orderId);
     const prod =
@@ -35,34 +35,35 @@ export default function Purchases() {
       null;
 
     try {
-      // 1. Check local binary cache for the exact original file
-      if (productId) {
-        const localCached = await getOriginalPdfLocally(productId);
-        if (localCached && localCached.blob) {
-          downloadPdfBlob(localCached.blob, `${cleanName}.pdf`);
-          setDownloadMsg(`✓ "${title}" downloaded successfully!`);
-          setTimeout(() => setDownloadMsg(null), 3500);
-          return;
-        }
-      }
-
-      // 2. Check in-memory custom uploaded PDF
-      const customData = productId ? getCustomPdfFile(productId) : null;
-      if (customData && customData.startsWith('data:')) {
+      // 1. Direct Server Uploaded File (/api/files/... or /uploads/...)
+      const downloadTarget = prod?.pdfUrl || '';
+      if (downloadTarget.startsWith('/api/') || downloadTarget.startsWith('/uploads/')) {
+        const downloadUrl = `${downloadTarget}${downloadTarget.includes('?') ? '&' : '?'}download=1`;
+        
+        // Method A: Native direct browser download
         const link = document.createElement('a');
-        link.href = customData;
+        link.href = downloadUrl;
         link.download = `${cleanName}.pdf`;
+        link.setAttribute('target', '_self');
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        setDownloadMsg(`✓ "${title}" downloaded successfully!`);
-        setTimeout(() => setDownloadMsg(null), 3500);
+
+        // Method B: Resilient blob stream download for Android / mobile browsers
+        try {
+          const res = await fetch(downloadUrl);
+          if (res.ok) {
+            const blob = await res.blob();
+            downloadPdfBlob(blob, `${cleanName}.pdf`);
+          }
+        } catch {}
+
+        setDownloadMsg(`✓ "${title}" downloaded successfully! Check your downloads.`);
+        setTimeout(() => setDownloadMsg(null), 4000);
         return;
       }
 
-      const downloadTarget = prod?.pdfUrl || '';
-
-      // 3. Direct Permanent Cloud URL (Google Drive, Cloudinary, Dropbox, etc.)
+      // 2. Direct Permanent Cloud URL (Google Drive, Cloudinary, Dropbox, CDN)
       if (isValidCloudPdfUrl(downloadTarget)) {
         const directUrl = formatCloudPdfUrl(downloadTarget);
         const link = document.createElement('a');
@@ -74,38 +75,44 @@ export default function Purchases() {
         link.click();
         document.body.removeChild(link);
         setDownloadMsg(`✓ "${title}" download initiated!`);
-        setTimeout(() => setDownloadMsg(null), 3500);
+        setTimeout(() => setDownloadMsg(null), 4000);
         return;
       }
 
-      // 4. Server stream if available
-      if (downloadTarget.startsWith('/api/')) {
-        try {
-          const res = await fetch(downloadTarget);
-          if (res.ok && res.headers.get('content-type')?.includes('application/pdf')) {
-            const blob = await res.blob();
-            downloadPdfBlob(blob, `${cleanName}.pdf`);
-            setDownloadMsg(`✓ "${title}" downloaded successfully!`);
-            setTimeout(() => setDownloadMsg(null), 3500);
-            return;
-          }
-        } catch {}
+      // 3. Local binary cache for the exact original file
+      if (productId) {
+        const localCached = await getOriginalPdfLocally(productId);
+        if (localCached && localCached.blob) {
+          downloadPdfBlob(localCached.blob, `${cleanName}.pdf`);
+          setDownloadMsg(`✓ "${title}" downloaded successfully!`);
+          setTimeout(() => setDownloadMsg(null), 4000);
+          return;
+        }
       }
 
-      // 5. If no cloud link was set yet, open WhatsApp for direct delivery of original file
+      // 4. Server stream fallback endpoint
+      if (orderId) {
+        const serverDownloadUrl = `/api/download/${orderId}?productId=${productId || ''}`;
+        window.location.href = serverDownloadUrl;
+        setDownloadMsg(`✓ "${title}" download initiated!`);
+        setTimeout(() => setDownloadMsg(null), 4000);
+        return;
+      }
+
+      // 5. If no file link was set yet, open WhatsApp for direct delivery of original file
       const waText = encodeURIComponent(
-        `Hi PDF Master India, I purchased "${title}" (Order ID: ${orderId}). Please send my original PDF copy directly here.`
+        `Hi PDF Master India, I purchased "${title}" (Order ID: ${orderId}). Please send my exact original PDF copy directly here on WhatsApp.`
       );
       window.open(`https://wa.me/917079988808?text=${waText}`, '_blank');
-      setDownloadMsg(`✓ WhatsApp support opened for instant file delivery!`);
+      setDownloadMsg(`✓ WhatsApp opened for instant original PDF delivery!`);
       setTimeout(() => setDownloadMsg(null), 5000);
     } catch (e) {
       console.warn('Purchases PDF download error:', e);
       const waText = encodeURIComponent(
-        `Hi PDF Master India, I need help downloading "${title}" (Order ID: ${orderId}). Please send my file directly on WhatsApp.`
+        `Hi PDF Master India, I need help downloading "${title}" (Order ID: ${orderId}). Please send my original file directly on WhatsApp.`
       );
       window.open(`https://wa.me/917079988808?text=${waText}`, '_blank');
-      setDownloadMsg('✓ WhatsApp support opened for assistance.');
+      setDownloadMsg('✓ WhatsApp opened for assistance.');
     }
   };
 
@@ -176,19 +183,28 @@ export default function Purchases() {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 w-full sm:w-auto">
+                  <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 w-full sm:w-auto">
                     <button
                       onClick={() => setReadingProduct(prod)}
-                      className="flex-1 sm:flex-none bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-4 py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5"
+                      className="flex-1 sm:flex-none bg-gray-100 hover:bg-gray-200 text-gray-800 text-xs font-bold px-3.5 py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                     >
                       <BookOpen size={14} /> Read Online
                     </button>
                     <button
                       onClick={() => handleDownload(ord.id, ord.productId, ord.productTitle)}
-                      className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                      className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-sm cursor-pointer"
                     >
                       <Download size={14} /> Download PDF
                     </button>
+                    <a
+                      href={`https://wa.me/917079988808?text=${encodeURIComponent(`Hi PDF Master India, I purchased "${ord.productTitle}" (Order ID: ${ord.id}). Please send my original PDF copy directly here on WhatsApp.`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-[#25D366] hover:bg-[#20ba59] active:scale-98 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl transition-colors flex items-center justify-center gap-1.5 shadow-xs cursor-pointer shrink-0"
+                      title="Get original PDF directly on WhatsApp"
+                    >
+                      <MessageCircle size={14} className="fill-white text-white" /> WhatsApp Copy
+                    </a>
                   </div>
                 </div>
               );

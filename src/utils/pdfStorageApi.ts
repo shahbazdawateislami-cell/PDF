@@ -70,6 +70,7 @@ export function isValidCloudPdfUrl(url?: string | null): boolean {
   if (!trimmed) return false;
   if (trimmed.startsWith('blob:')) return false;
   if (trimmed.startsWith('data:')) return false;
+  if (trimmed.startsWith('/api/files/') || trimmed.startsWith('/uploads/')) return true;
   return trimmed.startsWith('http://') || trimmed.startsWith('https://');
 }
 
