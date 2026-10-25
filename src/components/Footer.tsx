@@ -69,22 +69,9 @@ export const Footer: React.FC = () => {
           <div className="text-xl font-black text-gray-900 tracking-tight leading-none mb-2">
             PDF Master <span className="text-orange-500">India</span>
           </div>
-          <p className="text-xs text-gray-500 leading-relaxed mb-4">
+          <p className="text-xs text-gray-500 leading-relaxed">
             India's #1 digital marketplace for high-yield, curated PDF notes, study materials, and practical business guides.
           </p>
-          <div className="text-xs text-gray-500 space-y-1">
-            <p className="flex items-center gap-2">
-              <Mail size={14} className="text-gray-400" /> support@pdfmaster.in
-            </p>
-            <a
-              href="https://wa.me/917079988808?text=Hi%20PDF%20Master%20India,%20I%20have%20a%20question%20about%20ordering%20a%20PDF"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center gap-2 text-emerald-700 hover:text-emerald-800 font-bold"
-            >
-              <Phone size={14} className="text-emerald-600" /> +91 70799 88808 (WhatsApp &amp; Support)
-            </a>
-          </div>
         </div>
 
         {/* Quick Links */}

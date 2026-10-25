@@ -6,6 +6,8 @@ import path from 'path';
 import fs from 'fs';
 import multer from 'multer';
 import { fileURLToPath } from 'url';
+import { generateComprehensivePdf } from './src/utils/generateServerPdf';
+import { INITIAL_PRODUCTS, INITIAL_BUNDLES } from './src/data/initialProducts';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const distPath = path.resolve(__dirname, 'dist');
@@ -190,6 +192,10 @@ const PRODUCT_PRICE_MAP: Record<string, number> = {
   'hindi-master-program': 149,
   'kids-islamic-learning': 99,
   'academic-planner-2025-26': 99,
+  'bundle-ai-mega-pack': 149,
+  'bundle-student-topper-pack': 149,
+  'bundle-career-freelance-pack': 149,
+  'bundle-islamic-family-pack': 99,
 };
 
 // 1. Create Razorpay Order with Server-Side Price Verification (Ultra-Resilient)
@@ -551,6 +557,29 @@ app.get('/api/download/:orderId', async (req, res) => {
           }
         } catch (e) {}
       }
+
+      // If still missing from disk, generate on-demand using generateComprehensivePdf
+      if (!customFilePath) {
+        const item =
+          prods[productId] ||
+          INITIAL_PRODUCTS.find((p) => p.id === productId || p.id === productId.replace(/_/g, '-')) ||
+          INITIAL_BUNDLES.find((b) => b.id === productId || b.id === productId.replace(/_/g, '-')) ||
+          null;
+
+        if (item) {
+          try {
+            const genBuf = generateComprehensivePdf(item);
+            const genName = `${productId}.pdf`;
+            const genPath = path.join(UPLOADS_DIR, genName);
+            fs.writeFileSync(genPath, genBuf);
+            customFilePath = genPath;
+            customFileName = genName;
+            console.log(`[On-Demand Generated for Order ${orderId}] Saved ${genName} (${Math.round(genBuf.length / 1024)} KB)`);
+          } catch (e) {
+            console.warn(`Could not generate PDF on the fly for ${productId}:`, e);
+          }
+        }
+      }
     }
 
     if (customFilePath && fs.existsSync(customFilePath)) {
@@ -560,13 +589,12 @@ app.get('/api/download/:orderId', async (req, res) => {
       return fs.createReadStream(customFilePath).pipe(res);
     }
 
-    // If no PDF file is uploaded yet, NEVER generate a fake/synthetic document.
-    // Instead, redirect directly to WhatsApp support with pre-filled order verification details
+    // Direct WhatsApp assistance fallback if no file could be created
     const title = orderData?.productTitle || 'PDF Master Guide';
     const waText = encodeURIComponent(
       `Hi PDF Master India, I purchased "${title}" (Order ID: ${orderId}). Please send my exact original PDF file directly here on WhatsApp.`
     );
-    console.log(`[Download Notice] No local PDF file for ${orderId} (${productId}). Redirecting to WhatsApp delivery.`);
+    console.log(`[Download Notice] Redirecting order ${orderId} (${productId}) to WhatsApp delivery.`);
     return res.redirect(`https://wa.me/917079988808?text=${waText}`);
   } catch (err) {
     console.error('Download stream error:', err);
@@ -702,8 +730,37 @@ app.get('/api/files/:filename', (req, res) => {
     const filename = path.basename(req.params.filename);
     const filePath = path.join(UPLOADS_DIR, filename);
 
+    // If file does not exist on disk, auto-generate PDF on-the-fly
     if (!fs.existsSync(filePath)) {
-      return res.status(404).send('File not found');
+      const ext = path.extname(filename).toLowerCase();
+      if (ext === '.pdf') {
+        const rawId = filename.replace(/\.pdf$/i, '');
+        const prods = (store.products || {}) as Record<string, any>;
+        const matched =
+          prods[rawId] ||
+          INITIAL_PRODUCTS.find((p) => p.id === rawId || p.id === rawId.replace(/_/g, '-') || p.id.replace(/_/g, '-') === rawId.replace(/_/g, '-')) ||
+          INITIAL_BUNDLES.find((b) => b.id === rawId || b.id === rawId.replace(/_/g, '-') || b.id.replace(/_/g, '-') === rawId.replace(/_/g, '-')) ||
+          Object.values(prods).find((p: any) => p.title?.toLowerCase().replace(/[^a-z0-9]/g, '') === rawId.toLowerCase().replace(/[^a-z0-9]/g, '')) ||
+          INITIAL_PRODUCTS.find((p) => p.title?.toLowerCase().replace(/[^a-z0-9]/g, '') === rawId.toLowerCase().replace(/[^a-z0-9]/g, '')) ||
+          {
+            id: rawId,
+            title: rawId.replace(/[-_]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()),
+            category: 'Digital Publication',
+            description: 'Official verified digital edition with step-by-step methodologies and practical frameworks.',
+            pdfPagesCount: 120
+          };
+
+        try {
+          const buf = generateComprehensivePdf(matched);
+          fs.writeFileSync(filePath, buf);
+          console.log(`[On-Demand File Created] ${filename} (${Math.round(buf.length / 1024)} KB)`);
+        } catch (genErr) {
+          console.error(`Failed to generate on-demand PDF for ${filename}:`, genErr);
+          return res.status(404).send('File not found');
+        }
+      } else {
+        return res.status(404).send('File not found');
+      }
     }
 
     const ext = path.extname(filename).toLowerCase();

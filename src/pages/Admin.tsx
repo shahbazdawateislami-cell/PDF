@@ -1523,7 +1523,7 @@ export default function Admin() {
                     Live Sales Analytics
                   </span>
                   <span className="text-xs text-gray-300 font-medium">
-                    سیلز رپورٹ (آج، اس ہفتے، اس مہینے اور مخصوص تاریخ)
+                    Sales Report (Today, This Week, This Month, and Custom Date)
                   </span>
                 </div>
                 <h2 className="text-base sm:text-lg font-black text-white mt-1">
@@ -1591,7 +1591,7 @@ export default function Admin() {
                 }`}
               >
                 <div className="flex items-center justify-between text-[11px] font-bold text-emerald-400 uppercase">
-                  <span>آج کی سیلز (Today)</span>
+                  <span>Today's Sales</span>
                   <Clock size={12} />
                 </div>
                 <div className="text-lg sm:text-xl font-black text-white mt-0.5">
@@ -1616,7 +1616,7 @@ export default function Admin() {
                 }`}
               >
                 <div className="flex items-center justify-between text-[11px] font-bold text-blue-400 uppercase">
-                  <span>اس ہفتے کی سیلز (This Week)</span>
+                  <span>This Week's Sales</span>
                   <Calendar size={12} />
                 </div>
                 <div className="text-lg sm:text-xl font-black text-white mt-0.5">
@@ -1641,7 +1641,7 @@ export default function Admin() {
                 }`}
               >
                 <div className="flex items-center justify-between text-[11px] font-bold text-purple-400 uppercase">
-                  <span>اس مہینے کی سیلز (This Month)</span>
+                  <span>This Month's Sales</span>
                   <TrendingUp size={12} />
                 </div>
                 <div className="text-lg sm:text-xl font-black text-white mt-0.5">
@@ -1661,14 +1661,14 @@ export default function Admin() {
                 }`}
               >
                 <div className="flex items-center justify-between text-[11px] font-bold text-amber-400 uppercase">
-                  <span>مخصوص تاریخ (Specific Date)</span>
+                  <span>Specific Date</span>
                   <Filter size={12} />
                 </div>
                 <div className="text-lg sm:text-xl font-black text-white mt-0.5">
                   {customFilterDate ? `₹${filteredOrdersRevenue.toLocaleString()}` : 'Select Date'}
                 </div>
                 <div className="text-[10px] text-gray-400 mt-0.5 truncate">
-                  {customFilterDate ? `${customFilterDate} (${filteredOrders.filter(o => o.status === 'paid').length} Orders)` : 'اوپر دی گئی تاریخ منتخب کریں'}
+                  {customFilterDate ? `${customFilterDate} (${filteredOrders.filter(o => o.status === 'paid').length} Orders)` : 'Select Date Above'}
                 </div>
               </div>
             </div>
@@ -3143,7 +3143,7 @@ export default function Admin() {
                   </div>
                   <div>
                     <h4 className="text-base font-black text-gray-950">
-                      Cloud PDF Storage &amp; Upload API (پی ڈی ایف کلاؤڈ اسٹوریج اے پی آئی)
+                      Cloud PDF Storage &amp; Upload API
                     </h4>
                     <p className="text-xs text-gray-500">
                       Badi 10MB, 20MB, ya 50MB PDF files ko direct internet par store karne aur customer download ke liye connect karein.
@@ -3604,7 +3604,7 @@ export default function Admin() {
               <div className="p-4 bg-orange-50/70 rounded-2xl border border-orange-200 space-y-4">
                 <div className="font-black text-gray-900 text-xs flex items-center gap-1.5 border-b border-orange-200/80 pb-2">
                   <Upload size={16} className="text-orange-600" />
-                  Select Files from Phone Gallery or Computer (موبائل یا کمپیوٹر سے فائلیں اور فوٹوز سلیکٹ کریں)
+                  Select Files from Phone Gallery or Computer
                 </div>
 
                 {/* 1. Cover Image Picker */}
@@ -3824,10 +3824,10 @@ export default function Admin() {
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2">
                     <div>
                       <label className="block font-black text-gray-900 text-xs">
-                        3. PDF Inside Pages &amp; Sample Material (کرسل کیلئے پی ڈی ایف کے اندرونی صفحات کی تصاویر):
+                        3. PDF Inside Pages &amp; Sample Material (Inside Preview Pages for Carousel):
                       </label>
                       <p className="text-[11px] text-gray-600">
-                        یہ فوٹوز خریداروں کو ہر پی ڈی ایف پر ٹیپ کرنے کے بعد نیچے ہوریزونٹل کرسل میں دکھائی دیں گی تاکہ وہ خریدنے سے پہلے اندر کا مٹیریل دیکھ سکیں۔
+                        These images will appear in the horizontal carousel when buyers view this PDF, allowing them to preview sample pages before purchasing.
                       </p>
                     </div>
                     <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-orange-100 text-orange-800 border border-orange-200 self-start sm:self-auto shrink-0">
@@ -3851,7 +3851,7 @@ export default function Admin() {
                       className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-95 text-white font-black text-xs flex items-center gap-1.5 shadow-sm transition-all"
                     >
                       <Upload size={14} />
-                      Select Multiple Photos from Gallery / PC (ایک سے زیادہ فوٹوز سلیکٹ کریں)
+                      Select Multiple Photos from Gallery / PC
                     </button>
 
                     <button
@@ -3987,7 +3987,7 @@ export default function Admin() {
                   onClick={() => setIsModalOpen(false)}
                   className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs border border-gray-300 transition-colors disabled:opacity-50"
                 >
-                  Cancel (کینسل کریں)
+                  Cancel
                 </button>
                 <button
                   type="submit"
@@ -4007,7 +4007,7 @@ export default function Admin() {
                     <>
                       <Check size={18} className="text-white stroke-[3]" />
                       <span>
-                        {editingProduct ? '✓ Save Changes (تبدیلیاں محفوظ کریں)' : '✓ Upload & Publish PDF (پی ڈی ایف محفوظ کریں)'}
+                        {editingProduct ? '✓ Save Changes' : '✓ Upload & Publish PDF'}
                       </span>
                     </>
                   )}
@@ -4262,7 +4262,7 @@ export default function Admin() {
                   onClick={() => setIsBundleModalOpen(false)}
                   className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-800 font-bold text-xs border border-gray-300 transition-colors"
                 >
-                  Cancel (کینسل کریں)
+                  Cancel
                 </button>
                 <button
                   type="submit"

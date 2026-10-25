@@ -72,7 +72,7 @@ export const ProductCard: React.FC<ProductCardProps> = ({ product, onPreviewImag
           className="absolute bottom-2 inset-x-2 bg-slate-900/85 hover:bg-slate-950 text-white text-[10px] font-bold py-1 px-2 rounded-lg opacity-90 sm:opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1 shadow-sm"
         >
           <Eye size={12} className="text-orange-400" />
-          <span>Inside Preview (صفحات دیکھیں)</span>
+          <span>Inside Preview (View Pages)</span>
         </button>
       </div>
 

@@ -186,7 +186,7 @@ export default function ProductDetails() {
                     <Sparkles size={18} className="text-amber-300" />
                   </div>
                   <span className="text-xs text-red-100 font-bold tracking-normal">
-                    ⚡ Instant Download Link • فوری حاصل کریں (One-Click Checkout)
+                    ⚡ Instant Download Link • Get File Immediately (One-Click Checkout)
                   </span>
                 </button>
 
@@ -201,57 +201,6 @@ export default function ProductDetails() {
                   <Heart size={16} className={wishlisted ? 'fill-red-600 text-red-600' : ''} />
                   {wishlisted ? 'Saved in Wishlist' : 'Add to Wishlist'}
                 </button>
-
-                {/* Direct WhatsApp Query Button */}
-                <a
-                  href={`https://wa.me/917079988808?text=Hi%20PDF%20Master%20India,%20I%20have%20a%20question%20about%20"${encodeURIComponent(product.title)}"%20(Price:%20₹${product.price})`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-2.5 px-4 rounded-xl text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center justify-center gap-2 transition-colors shadow-2xs"
-                >
-                  <MessageCircle size={15} className="fill-emerald-600 text-emerald-600" />
-                  <span>Ask or Order via WhatsApp (+91 70799 88808)</span>
-                </a>
-
-                {/* Copy Ad / Direct Buy Link Button */}
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const url = window.location.href;
-                      navigator.clipboard.writeText(url);
-                      alert(`✓ Product Landing Link copied for Meta Ads / Share:\n${url}`);
-                    }}
-                    className="py-2 px-3 rounded-xl text-[11px] font-bold bg-gray-50 hover:bg-gray-100 text-gray-700 border border-gray-200 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                    title="Copy Product Landing Page Link"
-                  >
-                    <Link2 size={13} className="text-gray-500" />
-                    <span>Copy Page Link</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const url = `${window.location.origin}/checkout/${product.id}`;
-                      navigator.clipboard.writeText(url);
-                      alert(`✓ Direct Checkout Link copied for Meta Ads:\n${url}`);
-                    }}
-                    className="py-2 px-3 rounded-xl text-[11px] font-bold bg-orange-50 hover:bg-orange-100 text-orange-800 border border-orange-200 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-                    title="Copy Direct Buy Checkout Link"
-                  >
-                    <Zap size={13} className="text-orange-600 fill-orange-600" />
-                    <span>Copy Buy Link</span>
-                  </button>
-                </div>
-
-                <div className="flex items-center justify-center gap-6 pt-1 text-[11px] text-gray-500 font-medium">
-                  <span className="flex items-center gap-1">
-                    <ShieldCheck size={14} className="text-emerald-600" /> Razorpay Verified
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Download size={14} className="text-blue-600" /> Instant PDF Link
-                  </span>
-                </div>
               </div>
             </div>
           </div>
@@ -259,28 +208,13 @@ export default function ProductDetails() {
 
         {/* 1. PREVIEW IMAGES & INSIDE PAGES HORIZONTAL CAROUSEL */}
         <section className="bg-white rounded-3xl p-5 sm:p-7 border border-gray-200/80 shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-100 pb-3">
-            <div>
-              <div className="flex items-center gap-2 mb-1">
-                <span className="bg-orange-500 text-white text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                  Inside Preview • اندرونی صفحات
-                </span>
-                <span className="text-xs text-gray-500 font-medium">
-                  {product.previewImages?.length || 5} Sample Pages
-                </span>
-              </div>
-              <h2 className="text-lg sm:text-2xl font-black text-gray-900 tracking-tight">
-                Inside Look &amp; Sample Pages Carousel
-              </h2>
-              <p className="text-xs text-gray-500 mt-0.5">
-                خریدنے سے پہلے پی ڈی ایف کا اصل مواد اور صفحات دیکھیں (Swipe / click to zoom in full screen)
-              </p>
-            </div>
-            <div className="flex items-center gap-2 self-start sm:self-auto">
-              <span className="text-xs text-blue-600 font-bold bg-blue-50 px-3 py-1 rounded-xl flex items-center gap-1 border border-blue-200">
-                <ZoomIn size={13} /> Tap to Zoom Fullscreen
-              </span>
-            </div>
+          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+            <h2 className="text-lg sm:text-2xl font-black text-gray-900 tracking-tight">
+              Inside Look &amp; Sample Pages Carousel
+            </h2>
+            <span className="text-xs text-gray-500 font-medium">
+              {product.previewImages?.length || 5} Sample Pages
+            </span>
           </div>
 
           <div className="py-2">
@@ -316,31 +250,6 @@ export default function ProductDetails() {
               gap={14}
             />
           </div>
-
-          {/* Quick Buy CTA Bar below the Carousel */}
-          <div className="bg-gradient-to-r from-orange-50 via-amber-50 to-orange-50 rounded-2xl p-3.5 sm:p-4 border border-orange-200 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="flex items-center gap-3 text-center sm:text-left">
-              <div className="w-10 h-10 rounded-xl bg-orange-500 text-white flex items-center justify-center font-black text-sm shrink-0 shadow-xs">
-                PDF
-              </div>
-              <div>
-                <p className="text-xs font-bold text-gray-900">
-                  Like what you see in the preview? Get the complete {product.pdfPagesCount || 140}-page guide now!
-                </p>
-                <p className="text-[11px] text-gray-500">
-                  Instant download delivered automatically after verified Razorpay payment.
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => navigate(`/checkout/${product.id}`)}
-              className="w-full sm:w-auto bg-gradient-to-r from-red-600 via-rose-600 to-red-600 hover:from-red-700 hover:to-rose-700 active:scale-95 text-white font-black text-sm sm:text-base px-8 py-3.5 rounded-2xl shadow-lg shadow-red-500/25 ring-2 ring-red-200 transition-all flex items-center justify-center gap-2 shrink-0 cursor-pointer"
-            >
-              <Zap size={16} className="text-amber-300 fill-amber-300" />
-              <span>Buy Now for ₹{product.price}</span>
-            </button>
-          </div>
         </section>
 
         {/* 2. MORE BOOKS FROM THIS SERIES CAROUSEL */}
@@ -366,48 +275,6 @@ export default function ProductDetails() {
             />
           </section>
         )}
-
-        {/* 3. SAMPLE PDF PAGES (AUTO SCROLL) CAROUSEL */}
-        <section className="bg-white rounded-3xl p-5 sm:p-7 border border-gray-200/80 shadow-xs">
-          <div className="flex justify-between items-center mb-4">
-            <div>
-              <h2 className="text-lg sm:text-xl font-black text-gray-900 tracking-tight">
-                Sample PDF Pages (Auto Scroll)
-              </h2>
-              <p className="text-xs text-gray-500">Read sample pages before purchasing</p>
-            </div>
-            <button
-              onClick={() => openLightbox(product.samplePages, 0)}
-              className="text-xs font-bold text-blue-600 hover:text-blue-700 flex items-center gap-1"
-            >
-              <ZoomIn size={14} /> Fullscreen Read
-            </button>
-          </div>
-
-          <Carousel
-            items={product.samplePages.map((pageImg, idx) => (
-              <div
-                key={idx}
-                onClick={() => openLightbox(product.samplePages, idx)}
-                className="cursor-pointer group relative rounded-xl overflow-hidden border border-gray-200 bg-white shadow-xs hover:shadow-lg transition-all"
-              >
-                <img
-                  src={pageImg}
-                  alt={`Sample Page ${idx + 1}`}
-                  className="w-full aspect-[3/4] object-contain group-hover:scale-105 transition-transform duration-300"
-                />
-                <div className="p-2 text-center text-[11px] font-bold text-gray-700 bg-gray-50 border-t border-gray-100">
-                  Sample Page {idx + 1}
-                </div>
-              </div>
-            ))}
-            itemsToShow={{ mobile: 2, tablet: 4, desktop: 5 }}
-            autoScroll={true}
-            autoScrollInterval={3000}
-            showArrows={true}
-            showDots={true}
-          />
-        </section>
 
         {/* 4. TABS SECTION (Description, Table of Contents, Reviews, FAQ) */}
         <section className="bg-white rounded-3xl p-5 sm:p-8 border border-gray-200/80 shadow-xs">
@@ -572,10 +439,10 @@ export default function ProductDetails() {
                 <div className="p-4 rounded-xl bg-emerald-50/80 border border-emerald-200">
                   <h5 className="font-bold text-xs sm:text-sm text-emerald-950 mb-1 flex items-center gap-1.5">
                     <MessageCircle size={15} className="fill-emerald-600 text-emerald-600" />
-                    کیا میں واٹس ایپ پر براہ راست رہنمائی یا فائل لے سکتا ہوں؟
+                    Can I get assistance or files directly on WhatsApp?
                   </h5>
                   <p className="text-xs text-emerald-800 leading-relaxed">
-                    جی ہاں! آپ کسی بھی وقت ہمارے ہیلپ لائن نمبر <a href="https://wa.me/917079988808" target="_blank" rel="noopener noreferrer" className="font-bold underline text-emerald-900">+91 70799 88808</a> پر واٹس ایپ یا کال کر کے ڈاؤن لوڈ لنک، نمونہ صفحات یا معلومات حاصل کر سکتے ہیں۔
+                    Yes! You can contact our official helpline at <a href="https://wa.me/917079988808" target="_blank" rel="noopener noreferrer" className="font-bold underline text-emerald-900">+91 70799 88808</a> anytime via WhatsApp or Call for download links, sample pages, or instant assistance.
                   </p>
                 </div>
               </div>

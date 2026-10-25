@@ -124,7 +124,7 @@ export const PdfInsidePreviewModal: React.FC<PdfInsidePreviewModalProps> = ({
               <div className="flex items-center gap-2 text-xs text-blue-950 font-bold">
                 <Sparkles size={16} className="text-blue-600 shrink-0" />
                 <span>
-                  خریدنے سے پہلے پی ڈی ایف کے اندر کا مٹیریل چیک کریں (Scroll horizontally to inspect pages)
+                  Check inside material before purchasing (Scroll horizontally to inspect pages)
                 </span>
               </div>
               <span className="text-[11px] text-blue-600 font-bold flex items-center gap-1 self-end sm:self-auto">

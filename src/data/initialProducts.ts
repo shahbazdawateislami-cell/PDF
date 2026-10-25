@@ -576,6 +576,16 @@ export const INITIAL_PRODUCTS: Product[] = [
   }
 ];
 
+// Ensure every single product in the catalog has a permanent valid pdfUrl and pdfFileName
+INITIAL_PRODUCTS.forEach((p) => {
+  if (!p.pdfUrl || p.pdfUrl.startsWith('blob:')) {
+    p.pdfUrl = `/api/files/${p.id}.pdf`;
+  }
+  if (!p.pdfFileName) {
+    p.pdfFileName = `${p.title.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+  }
+});
+
 export const CATEGORIES_LIST = [
   { id: 'ai-tools', name: 'AI Tools', icon: '🤖', count: 4 },
   { id: 'study-material', name: 'Study Material', icon: '📚', count: 6 },
