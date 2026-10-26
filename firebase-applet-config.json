@@ -1,12 +1,10 @@
 {
-  "projectId": "gen-lang-client-0162956694",
-  "appId": "1:1091687454109:web:8b04a9160c5b0277848b74",
-  "apiKey": "AIzaSyAbGP2P3GYPiEz0b8i8lZNyfBObv0r0qUA",
-  "authDomain": "gen-lang-client-0162956694.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-pdfmasterindia-10c600df-d059-4fdb-b9b8-711c72888924",
-  "storageBucket": "gen-lang-client-0162956694.firebasestorage.app",
-  "messagingSenderId": "1091687454109",
-  "measurementId": "",
-  "oAuthClientId": "1091687454109-2s7dht5ksgivofkacj66f2hl0kqa11lm.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "projectId": "pdf-master-india",
+  "appId": "1:932502543932:web:8414fc14c56e6d27762d39",
+  "apiKey": "AIzaSyC4TTzCWLxErUty1AafG8b5rdfZQQCxh5c",
+  "authDomain": "pdf-master-india.firebaseapp.com",
+  "firestoreDatabaseId": "(default)",
+  "storageBucket": "pdf-master-india.firebasestorage.app",
+  "messagingSenderId": "932502543932",
+  "measurementId": "G-NZHG7QP0H7"
 }

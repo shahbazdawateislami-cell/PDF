@@ -54,7 +54,7 @@ export const Carousel: React.FC<CarouselProps> = ({
     return () => window.removeEventListener('resize', updateVisibleCount);
   }, [itemsToShow]);
 
-  const maxIndex = Math.max(0, items.length - visibleCount);
+  const maxIndex = Math.max(0, Math.ceil(items.length - visibleCount));
 
   // Auto-scroll logic (right to left, pause on hover)
   useEffect(() => {

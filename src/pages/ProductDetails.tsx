@@ -63,6 +63,13 @@ export default function ProductDetails() {
     .filter((p) => p.id !== product.id && (p.category === product.category || p.series === product.series))
     .slice(0, 6);
 
+  // Safely guard preview and sample images
+  const previewImagesList = (product.previewImages && product.previewImages.length > 0)
+    ? product.previewImages
+    : (product.samplePages && product.samplePages.length > 0)
+    ? product.samplePages
+    : [product.coverImage || ''].filter(Boolean);
+
   const openLightbox = (images: string[], index: number = 0) => {
     setLightboxImages(images);
     setLightboxIndex(index);
@@ -92,7 +99,7 @@ export default function ProductDetails() {
             <div className="md:col-span-5 flex flex-col items-center">
               <div 
                 className="relative w-full max-w-sm rounded-2xl overflow-hidden shadow-2xl bg-gray-50 border border-gray-100 group cursor-pointer"
-                onClick={() => openLightbox(product.previewImages?.length ? product.previewImages : [product.coverImage || ''], 0)}
+                onClick={() => openLightbox(previewImagesList.length > 0 ? previewImagesList : [product.coverImage || ''], 0)}
               >
                 <img
                   src={product.coverImage}
@@ -207,50 +214,52 @@ export default function ProductDetails() {
         </section>
 
         {/* 1. PREVIEW IMAGES & INSIDE PAGES HORIZONTAL CAROUSEL */}
-        <section className="bg-white rounded-3xl p-5 sm:p-7 border border-gray-200/80 shadow-xs space-y-4">
-          <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-            <h2 className="text-lg sm:text-2xl font-black text-gray-900 tracking-tight">
-              Inside Look &amp; Sample Pages Carousel
-            </h2>
-            <span className="text-xs text-gray-500 font-medium">
-              {product.previewImages?.length || 5} Sample Pages
-            </span>
-          </div>
+        {previewImagesList.length > 0 && (
+          <section className="bg-white rounded-3xl p-5 sm:p-7 border border-gray-200/80 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+              <h2 className="text-lg sm:text-2xl font-black text-gray-900 tracking-tight">
+                Inside Look &amp; Sample Pages Carousel
+              </h2>
+              <span className="text-xs text-gray-500 font-medium">
+                {previewImagesList.length} Sample Pages
+              </span>
+            </div>
 
-          <div className="py-2">
-            <Carousel
-              items={product.previewImages.map((img, idx) => (
-                <div
-                  key={idx}
-                  onClick={() => openLightbox(product.previewImages, idx)}
-                  className="cursor-pointer group relative rounded-2xl overflow-hidden border-2 border-gray-200 hover:border-orange-500 bg-gray-50 shadow-xs hover:shadow-xl transition-all duration-300"
-                >
-                  <img
-                    src={img}
-                    alt={`Preview Page ${idx + 1}`}
-                    className="w-full aspect-[3/4] object-contain group-hover:scale-105 transition-transform duration-300 bg-white"
-                  />
-                  {/* Page Indicator Tag */}
-                  <div className="absolute top-2.5 left-2.5 bg-slate-900/85 backdrop-blur-xs text-white text-[10px] font-black px-2 py-0.5 rounded shadow-xs">
-                    Page {idx + 1}
-                  </div>
-                  {/* Hover Overlay */}
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
-                    <div className="bg-white text-gray-900 text-xs font-black px-3 py-1 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                      <ZoomIn size={14} className="text-orange-600" /> Zoom Page
+            <div className="py-2">
+              <Carousel
+                items={previewImagesList.map((img, idx) => (
+                  <div
+                    key={idx}
+                    onClick={() => openLightbox(previewImagesList, idx)}
+                    className="cursor-pointer group relative rounded-2xl overflow-hidden border-2 border-gray-200 hover:border-orange-500 bg-gray-50 shadow-xs hover:shadow-xl transition-all duration-300"
+                  >
+                    <img
+                      src={img}
+                      alt={`Preview Page ${idx + 1}`}
+                      className="w-full aspect-[3/4] object-contain group-hover:scale-105 transition-transform duration-300 bg-white"
+                    />
+                    {/* Page Indicator Tag */}
+                    <div className="absolute top-2.5 left-2.5 bg-slate-900/85 backdrop-blur-xs text-white text-[10px] font-black px-2 py-0.5 rounded shadow-xs">
+                      Page {idx + 1}
+                    </div>
+                    {/* Hover Overlay */}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                      <div className="bg-white text-gray-900 text-xs font-black px-3 py-1 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                        <ZoomIn size={14} className="text-orange-600" /> Zoom Page
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-              itemsToShow={{ mobile: 1.5, tablet: 3.5, desktop: 4.5 }}
-              autoScroll={true}
-              autoScrollInterval={4000}
-              showArrows={true}
-              showDots={true}
-              gap={14}
-            />
-          </div>
-        </section>
+                ))}
+                itemsToShow={{ mobile: 1.5, tablet: 3.5, desktop: 4.5 }}
+                autoScroll={true}
+                autoScrollInterval={4000}
+                showArrows={true}
+                showDots={true}
+                gap={14}
+              />
+            </div>
+          </section>
+        )}
 
         {/* 2. MORE BOOKS FROM THIS SERIES CAROUSEL */}
         {relatedProducts.length > 0 && (
