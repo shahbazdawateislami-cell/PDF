@@ -24,6 +24,7 @@ interface LocalStore {
   orders: Record<string, any>;
   payments: Record<string, any>;
   products: Record<string, any>;
+  deletedProductIds: string[];
   download_logs: any[];
 }
 
@@ -32,6 +33,7 @@ let store: LocalStore = {
   orders: {},
   payments: {},
   products: {},
+  deletedProductIds: [],
   download_logs: []
 };
 
@@ -44,6 +46,25 @@ function loadStore() {
       const content = fs.readFileSync(DATA_FILE, 'utf-8');
       const parsed = JSON.parse(content);
       store = { ...store, ...parsed };
+    }
+    if (!store.products || typeof store.products !== 'object') {
+      store.products = {};
+    }
+    if (!Array.isArray(store.deletedProductIds)) {
+      store.deletedProductIds = [];
+    }
+
+    // Seed baseline initial products if not already present and not deleted
+    const deletedSet = new Set(store.deletedProductIds);
+    let changed = false;
+    INITIAL_PRODUCTS.forEach((p) => {
+      if (!deletedSet.has(p.id) && !store.products[p.id]) {
+        store.products[p.id] = { ...p };
+        changed = true;
+      }
+    });
+    if (changed) {
+      persistStore();
     }
   } catch (e) {
     console.warn('Local store init fallback to memory:', e);
@@ -617,7 +638,8 @@ const uploadStorage = multer.diskStorage({
     try {
       originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
     } catch {}
-    const safeExt = path.extname(originalName) || '.pdf';
+    const isImage = file.mimetype.startsWith('image/') || /\.(jpe?g|png|webp|gif)$/i.test(originalName);
+    const safeExt = path.extname(originalName) || (isImage ? '.jpg' : '.pdf');
     const cleanBase = path.basename(originalName, safeExt).replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 40) || 'file';
     cb(null, `${cleanPrefix}${Date.now()}_${cleanBase}${safeExt}`);
   }
@@ -685,6 +707,27 @@ app.post('/api/upload-file', (req, res) => {
       console.error('Base64 upload error:', base64Err);
       return res.status(500).json({ error: 'Failed to process file', details: base64Err?.message });
     }
+  });
+});
+
+// Batch/Multiple file upload endpoint for preview pages & gallery
+app.post('/api/upload-multiple', (req, res) => {
+  uploadMiddleware.array('files', 25)(req, res, (err: any) => {
+    if (err) {
+      console.error('Multiple upload error:', err);
+      return res.status(500).json({ error: err.message || 'Multiple upload failed' });
+    }
+    const files = req.files as Express.Multer.File[];
+    if (!files || files.length === 0) {
+      return res.status(400).json({ error: 'No files uploaded' });
+    }
+    const uploadedList = files.map((file) => ({
+      fileUrl: `/api/files/${file.filename}`,
+      fileName: file.originalname,
+      size: file.size
+    }));
+    console.log(`[Batch Uploaded ${uploadedList.length} files successfully]`);
+    res.json({ success: true, files: uploadedList });
   });
 });
 
@@ -789,7 +832,8 @@ app.get('/api/files/:filename', (req, res) => {
 
 // 8. Product CRUD Endpoints for Server Sync
 app.get('/api/products', async (_req, res) => {
-  const prods = Object.values(store.products || {});
+  const deletedSet = new Set(store.deletedProductIds || []);
+  const prods = Object.values(store.products || {}).filter((p: any) => p && p.id && !deletedSet.has(p.id));
   res.json(prods);
 });
 
@@ -800,8 +844,12 @@ app.post('/api/products', async (req, res) => {
       product.id = `pdf-${Date.now()}`;
     }
     if (!store.products) store.products = {};
+    if (Array.isArray(store.deletedProductIds)) {
+      store.deletedProductIds = store.deletedProductIds.filter((id) => id !== product.id);
+    }
     store.products[product.id] = product;
     persistStore();
+    console.log(`[Product Saved to Server DB] ${product.id} - ${product.title}`);
     res.json({ success: true, product });
   } catch (err: any) {
     res.status(500).json({ error: err?.message });
@@ -811,11 +859,33 @@ app.post('/api/products', async (req, res) => {
 app.delete('/api/products/:id', async (req, res) => {
   try {
     const { id } = req.params;
+    if (!Array.isArray(store.deletedProductIds)) {
+      store.deletedProductIds = [];
+    }
+    if (!store.deletedProductIds.includes(id)) {
+      store.deletedProductIds.push(id);
+    }
     if (store.products && store.products[id]) {
       delete store.products[id];
-      persistStore();
     }
+    persistStore();
+    console.log(`[Product Deleted from Server DB] ${id}`);
     res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.post('/api/products/reset', async (_req, res) => {
+  try {
+    store.deletedProductIds = [];
+    store.products = {};
+    INITIAL_PRODUCTS.forEach((p) => {
+      store.products[p.id] = { ...p };
+    });
+    persistStore();
+    console.log('[Products Reset to Baseline Defaults]');
+    res.json({ success: true, count: Object.keys(store.products).length });
   } catch (err: any) {
     res.status(500).json({ error: err?.message });
   }

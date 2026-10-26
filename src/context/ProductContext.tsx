@@ -384,13 +384,34 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return DEFAULT_HERO_CONFIG;
   });
 
+  // Helper to safely cache products in localStorage without quota crashes
+  const saveProductsToLocalCache = (prods: Product[]) => {
+    try {
+      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(prods));
+    } catch {
+      try {
+        const lightweight = prods.map((p) => {
+          const item = { ...p };
+          if (item.coverImage && item.coverImage.length > 100000) item.coverImage = '';
+          if (item.pdfUrl && item.pdfUrl.length > 100000) item.pdfUrl = '';
+          if (Array.isArray(item.samplePages)) {
+            item.samplePages = item.samplePages.filter((s) => typeof s === 'string' && s.length < 100000);
+          }
+          if (Array.isArray(item.previewImages)) {
+            item.previewImages = item.previewImages.filter((s) => typeof s === 'string' && s.length < 100000);
+          }
+          return item;
+        });
+        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(lightweight));
+      } catch (e2) {
+        console.warn('LocalStorage quota notice (safe on fullstack):', e2);
+      }
+    }
+  };
+
   // Persistent storage effects with QuotaExceededError guards
   useEffect(() => {
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(products));
-    } catch (e) {
-      console.warn('LocalStorage quota notice for products, synced with server:', e);
-    }
+    saveProductsToLocalCache(products);
   }, [products]);
 
   useEffect(() => {
@@ -443,20 +464,38 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     let unsubCoupons: (() => void) | null = null;
 
     async function initRealtimeSync() {
-      // Initial server sync with 3s timeout
+      // 1. Initial server sync to load all persistent server products
       let serverProducts: Product[] = [];
       try {
-        const controller = new AbortController();
-        const tId = setTimeout(() => controller.abort(), 3000);
-        const res = await fetch('/api/products', { signal: controller.signal });
-        clearTimeout(tId);
+        const res = await fetch('/api/products');
         if (res.ok) {
           const list: Product[] = await res.json();
-          if (Array.isArray(list)) serverProducts = list;
+          if (Array.isArray(list) && list.length > 0) {
+            serverProducts = list;
+            setProducts((prev) => {
+              const catalogMap = new Map<string, Product>();
+              INITIAL_PRODUCTS.forEach((ip) => {
+                if (!deletedProductIds.has(ip.id)) catalogMap.set(ip.id, { ...ip });
+              });
+              prev.forEach((cp) => {
+                if (!deletedProductIds.has(cp.id)) catalogMap.set(cp.id, cp);
+              });
+              serverProducts.forEach((p) => {
+                if (p && p.id && !deletedProductIds.has(p.id)) {
+                  catalogMap.set(p.id, { ...(catalogMap.get(p.id) || {}), ...p });
+                }
+              });
+              const merged = Array.from(catalogMap.values());
+              saveProductsToLocalCache(merged);
+              return merged;
+            });
+          }
         }
-      } catch (err) {}
+      } catch (err) {
+        console.warn('Initial server products fetch notice:', err);
+      }
 
-      // REAL-TIME FIRESTORE LISTENER (Instant sync across AI Studio and Main Website)
+      // 2. REAL-TIME FIRESTORE LISTENER (Instant sync across devices and cloud)
       try {
         unsubProducts = onSnapshot(
           collection(db, 'products'),
@@ -474,7 +513,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
             });
 
             // Comprehensive catalog merging:
-            // 1. Start with INITIAL_PRODUCTS as the default baseline (excluding deleted)
+            // 1. Start with INITIAL_PRODUCTS as baseline
             const catalogMap = new Map<string, Product>();
             INITIAL_PRODUCTS.forEach((ip) => {
               if (!deletedProductIds.has(ip.id)) {
@@ -489,43 +528,36 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
               }
             });
 
-            // 3. Overlay Firestore products (supreme cloud source of truth for all edits & uploads)
+            // 3. Overlay Firestore products (supreme cloud source of truth)
             firestoreProducts.forEach((p) => {
               if (p && typeof p.id === 'string' && p.id.trim() && !deletedProductIds.has(p.id)) {
                 catalogMap.set(p.id, { ...(catalogMap.get(p.id) || {}), ...p });
               }
             });
 
-            // 4. If a custom product ('pdf-...') was removed from Firestore, remove from catalog
-            if (firestoreProducts.length > 0) {
-              const activeFirestoreIds = new Set(
-                firestoreProducts
-                  .filter((p) => p && typeof p.id === 'string')
-                  .map((p) => p.id)
-              );
-              Array.from(catalogMap.keys()).forEach((k) => {
-                if (k.startsWith('pdf-') && !activeFirestoreIds.has(k)) {
-                  catalogMap.delete(k);
+            // 4. Retain any active user products from state that aren't marked deleted
+            setProducts((currentProds) => {
+              currentProds.forEach((cp) => {
+                if (cp && cp.id && !deletedProductIds.has(cp.id) && !catalogMap.has(cp.id)) {
+                  catalogMap.set(cp.id, cp);
                 }
               });
-            }
 
-            const allProductsList = Array.from(catalogMap.values());
-            // Sort: Newly uploaded PDFs first, then remaining catalog
-            allProductsList.sort((a, b) => {
-              const aIsPdf = a.id.startsWith('pdf-');
-              const bIsPdf = b.id.startsWith('pdf-');
-              if (aIsPdf && !bIsPdf) return -1;
-              if (!aIsPdf && bIsPdf) return 1;
-              const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
-              const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-              return timeB - timeA;
+              const allProductsList = Array.from(catalogMap.values());
+              // Sort: Newly uploaded PDFs first, then remaining catalog
+              allProductsList.sort((a, b) => {
+                const aIsPdf = a.id.startsWith('pdf-');
+                const bIsPdf = b.id.startsWith('pdf-');
+                if (aIsPdf && !bIsPdf) return -1;
+                if (!aIsPdf && bIsPdf) return 1;
+                const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return timeB - timeA;
+              });
+
+              saveProductsToLocalCache(allProductsList);
+              return allProductsList;
             });
-
-            setProducts(allProductsList);
-            try {
-              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(allProductsList));
-            } catch {}
           },
           (error) => {
             console.warn('Real-time products sync notice:', error);
@@ -593,30 +625,28 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     // 1. Instantly update UI state so product immediately shows on website
-    setProducts((prev) => [newProduct, ...prev.filter((p) => p.id !== newId)]);
+    setProducts((prev) => {
+      const nextList = [newProduct, ...prev.filter((p) => p.id !== newId)];
+      saveProductsToLocalCache(nextList);
+      return nextList;
+    });
 
-    // 2. Fast background sync to server database with 2.5s timeout
+    // 2. High-priority persistent save to server database
     try {
-      const controller = new AbortController();
-      const tId = setTimeout(() => controller.abort(), 2500);
-      fetch('/api/products', {
+      await fetch('/api/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newProduct),
-        signal: controller.signal
-      })
-        .catch((e) => console.warn('Server product save notice:', e))
-        .finally(() => clearTimeout(tId));
-    } catch {}
+        body: JSON.stringify(newProduct)
+      });
+      console.log('✓ Product saved to server DB:', newId);
+    } catch (e) {
+      console.warn('Server product save notice:', e);
+    }
 
-    // 3. Fast sync to Firestore with timeout & payload sanitization (protects 1MB limit)
+    // 3. Sync to Firestore cloud database
     try {
       const sanitized = sanitizeForFirestore(newProduct);
-      const writePromise = setDoc(doc(db, 'products', newId), sanitized);
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Firestore write timeout')), 2500)
-      );
-      await Promise.race([writePromise, timeoutPromise]);
+      await setDoc(doc(db, 'products', newId), sanitized);
       console.log('✓ Product published to Firestore:', newId);
     } catch (e) {
       console.warn('Firestore write notice (non-fatal):', e);
@@ -627,46 +657,40 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const updateProduct = async (id: string, updated: Partial<Product>): Promise<void> => {
     let fullUpdatedProduct: Product | undefined;
-    setProducts((prev) =>
-      prev.map((p) => {
+    setProducts((prev) => {
+      const nextList = prev.map((p) => {
         if (p.id === id) {
           fullUpdatedProduct = { ...p, ...updated, id };
           return fullUpdatedProduct;
         }
         return p;
-      })
-    );
+      });
 
-    // If not found in active products, find in INITIAL_PRODUCTS
-    if (!fullUpdatedProduct) {
-      const match = INITIAL_PRODUCTS.find((ip) => ip.id === id);
-      if (match) {
-        fullUpdatedProduct = { ...match, ...updated, id };
-        setProducts((prev) => [fullUpdatedProduct!, ...prev]);
+      // If not found in active products, find in INITIAL_PRODUCTS
+      if (!fullUpdatedProduct) {
+        const match = INITIAL_PRODUCTS.find((ip) => ip.id === id);
+        if (match) {
+          fullUpdatedProduct = { ...match, ...updated, id };
+          nextList.unshift(fullUpdatedProduct);
+        }
       }
-    }
+
+      saveProductsToLocalCache(nextList);
+      return nextList;
+    });
 
     if (fullUpdatedProduct) {
       try {
-        const controller = new AbortController();
-        const tId = setTimeout(() => controller.abort(), 2500);
-        fetch('/api/products', {
+        await fetch('/api/products', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(fullUpdatedProduct),
-          signal: controller.signal
-        })
-          .catch(() => {})
-          .finally(() => clearTimeout(tId));
+          body: JSON.stringify(fullUpdatedProduct)
+        });
       } catch {}
 
       try {
         const sanitized = sanitizeForFirestore(fullUpdatedProduct);
-        const writePromise = setDoc(doc(db, 'products', id), sanitized, { merge: true });
-        const timeoutPromise = new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Firestore update timeout')), 2500)
-        );
-        await Promise.race([writePromise, timeoutPromise]);
+        await setDoc(doc(db, 'products', id), sanitized, { merge: true });
         console.log('✓ Product updated in Firestore:', id);
       } catch (e) {
         console.warn('Firestore update notice (non-fatal):', e);
@@ -684,22 +708,18 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return next;
     });
 
-    setProducts((prev) => prev.filter((p) => p.id !== id));
+    setProducts((prev) => {
+      const nextList = prev.filter((p) => p.id !== id);
+      saveProductsToLocalCache(nextList);
+      return nextList;
+    });
 
     try {
-      const controller = new AbortController();
-      const tId = setTimeout(() => controller.abort(), 2000);
-      fetch(`/api/products/${id}`, { method: 'DELETE', signal: controller.signal })
-        .catch(() => {})
-        .finally(() => clearTimeout(tId));
+      await fetch(`/api/products/${id}`, { method: 'DELETE' });
     } catch {}
 
     try {
-      const deletePromise = deleteDoc(doc(db, 'products', id));
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Firestore delete timeout')), 2000)
-      );
-      await Promise.race([deletePromise, timeoutPromise]);
+      await deleteDoc(doc(db, 'products', id));
     } catch (e) {
       console.warn('Firestore delete notice (non-fatal):', e);
     }
@@ -709,10 +729,11 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setDeletedProductIds(new Set());
     try {
       localStorage.removeItem(DELETED_IDS_STORAGE_KEY);
+      await fetch('/api/products/reset', { method: 'POST' });
     } catch {}
     setProducts(INITIAL_PRODUCTS);
     setBundles(INITIAL_BUNDLES);
-    localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(INITIAL_PRODUCTS));
+    saveProductsToLocalCache(INITIAL_PRODUCTS);
     localStorage.setItem(BUNDLES_STORAGE_KEY, JSON.stringify(INITIAL_BUNDLES));
   };
 

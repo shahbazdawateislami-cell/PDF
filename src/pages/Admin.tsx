@@ -279,6 +279,7 @@ export default function Admin() {
   const [uploadStatusText, setUploadStatusText] = useState('');
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
   const [isUploadingCover, setIsUploadingCover] = useState(false);
+  const [isUploadingSamplePages, setIsUploadingSamplePages] = useState(false);
   const [uploadProgressPercent, setUploadProgressPercent] = useState<number>(0);
   const [pdfUploadSource, setPdfUploadSource] = useState<'device' | 'url'>('device');
   const [coverUploadSource, setCoverUploadSource] = useState<'device' | 'url'>('device');
@@ -934,15 +935,39 @@ export default function Admin() {
     }
   };
 
-  // Handle Multiple Inside Pages File Selection from Mobile Gallery / PC with instant compression
+  // Handle Multiple Inside Pages File Selection from Mobile Gallery / PC with instant server upload
   const handleSamplePagesFilesChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
     const fileList = Array.from(files);
-    setUploadedSampleFiles((prev) => [...prev, ...fileList]);
-    showNotify(`⏳ Attached ${fileList.length} inside page(s), optimizing...`);
+    setIsUploadingSamplePages(true);
+    showNotify(`⏳ ${fileList.length} Sample Inside Pages upload ho rahi hain...`);
 
+    // 1. Direct batch upload to /api/upload-multiple
+    try {
+      const formData = new FormData();
+      fileList.forEach((f) => formData.append('files', f));
+      const res = await fetch('/api/upload-multiple', {
+        method: 'POST',
+        body: formData
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && Array.isArray(data.files) && data.files.length > 0) {
+          const newUrls = data.files.map((item: any) => item.fileUrl);
+          setFormSamplePages((prev) => [...prev, ...newUrls]);
+          showNotify(`✓ ${newUrls.length} Inside Preview Pages permanently upload ho gayi!`);
+          setIsUploadingSamplePages(false);
+          e.target.value = '';
+          return;
+        }
+      }
+    } catch (batchErr) {
+      console.warn('Batch upload notice, falling back to local optimization:', batchErr);
+    }
+
+    // 2. Fallback: Compress and set in state
     try {
       const compressedList = await Promise.all(
         fileList.map((f) => compressImageToDataUrl(f, 600, 850, 0.72))
@@ -954,8 +979,10 @@ export default function Admin() {
       }
     } catch {
       showNotify(`✓ Attached ${fileList.length} inside page(s)`);
+    } finally {
+      setIsUploadingSamplePages(false);
+      e.target.value = '';
     }
-    e.target.value = '';
   };
 
   // Add Generated Template Sample Page
@@ -1089,25 +1116,26 @@ export default function Admin() {
         finalFileSize = `${mb} MB`;
       }
 
-      // 3. Upload Inside Preview Pages in parallel for maximum speed
-      let finalSamplePages: string[] = [];
-      if (uploadedSampleFiles.length > 0) {
+      // 3. Process Inside Preview Pages
+      let finalSamplePages = formSamplePages.filter((p) => p && !p.startsWith('blob:'));
+      if (finalSamplePages.length === 0 && uploadedSampleFiles.length > 0) {
         setUploadStatusText('Inside preview pages upload ho rahe hain...');
-        const uploadPromises = uploadedSampleFiles.map((sf, idx) =>
-          uploadFileToServer(sf, `${generatedOrExistingId}_sample_${idx + 1}`, 'image')
-            .then((res) => res.fileUrl)
-            .catch((err) => {
-              console.warn('Sample page upload warning:', err);
-              return '';
-            })
-        );
-        const results = await Promise.all(uploadPromises);
-        finalSamplePages = results.filter(Boolean);
-      } else {
-        finalSamplePages = formSamplePages.filter((p) => p && !p.startsWith('blob:'));
-        if (finalSamplePages.length === 0) {
-          finalSamplePages = [finalCoverImage, createSamplePageSvg(1, formTitle || 'Inside Guide')];
+        try {
+          const formData = new FormData();
+          uploadedSampleFiles.forEach((f) => formData.append('files', f));
+          const res = await fetch('/api/upload-multiple', { method: 'POST', body: formData });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.success && Array.isArray(data.files) && data.files.length > 0) {
+              finalSamplePages = data.files.map((item: any) => item.fileUrl);
+            }
+          }
+        } catch (sampleErr) {
+          console.warn('Sample pages upload notice during save:', sampleErr);
         }
+      }
+      if (finalSamplePages.length === 0) {
+        finalSamplePages = [finalCoverImage, createSamplePageSvg(1, formTitle || 'Inside Guide')];
       }
 
       const highlightsArr = formHighlights
@@ -3803,18 +3831,13 @@ export default function Admin() {
                           ✓
                         </div>
                         <div>
-                          <p className="text-xs font-black text-emerald-950">PDF File Uploaded Successfully!</p>
-                          <p className="text-[11px] text-emerald-800">Website par turant live karne ke liye "Publish PDF Now" dabayein.</p>
+                          <p className="text-xs font-black text-emerald-950">PDF Document Ready &amp; Uploaded!</p>
+                          <p className="text-[11px] text-emerald-800">Ab niche Cover Photo aur Sample Inside Pages add karein, fir aakhri mein "Save &amp; Publish" dabayein.</p>
                         </div>
                       </div>
-                      <button
-                        type="submit"
-                        disabled={isSubmittingProduct}
-                        className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-black text-xs rounded-lg shrink-0 shadow transition-all cursor-pointer flex items-center gap-1"
-                      >
-                        <Check size={14} className="stroke-[3]" />
-                        <span>Publish Now</span>
-                      </button>
+                      <span className="text-[11px] font-black px-2.5 py-1 rounded-lg bg-emerald-600 text-white shadow-2xs shrink-0">
+                        ✓ PDF Ready
+                      </span>
                     </div>
                   )}
                 </div>
@@ -3847,11 +3870,21 @@ export default function Admin() {
                   <div className="flex flex-wrap items-center gap-2 mb-3">
                     <button
                       type="button"
+                      disabled={isUploadingSamplePages}
                       onClick={() => samplePagesFileInputRef.current?.click()}
-                      className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-95 text-white font-black text-xs flex items-center gap-1.5 shadow-sm transition-all"
+                      className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 active:scale-95 text-white font-black text-xs flex items-center gap-1.5 shadow-sm transition-all disabled:opacity-60 cursor-pointer"
                     >
-                      <Upload size={14} />
-                      Select Multiple Photos from Gallery / PC
+                      {isUploadingSamplePages ? (
+                        <>
+                          <RefreshCw size={14} className="animate-spin" />
+                          Uploading Inside Pages...
+                        </>
+                      ) : (
+                        <>
+                          <Upload size={14} />
+                          Select Multiple Photos from Gallery / PC
+                        </>
+                      )}
                     </button>
 
                     <button
