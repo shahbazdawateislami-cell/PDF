@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { Product, Order, DownloadLog, Bundle, HeroBannerConfig, HeroStackedCard, Coupon } from '../types';
 import { INITIAL_PRODUCTS, CATEGORIES_LIST, INITIAL_BUNDLES } from '../data/initialProducts';
 import { db, auth } from '../firebase';
@@ -210,6 +210,8 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     } catch {}
     return new Set();
   });
+  const deletedProductIdsRef = useRef<Set<string>>(deletedProductIds);
+  deletedProductIdsRef.current = deletedProductIds;
   const [products, setProducts] = useState<Product[]>(() => {
     try {
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
@@ -464,7 +466,25 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     let unsubCoupons: (() => void) | null = null;
 
     async function initRealtimeSync() {
-      // 1. Initial server sync to load all persistent server products
+      // 1. First fetch server deleted IDs so deleted dummy products stay permanently deleted
+      try {
+        const delRes = await fetch('/api/deleted-ids');
+        if (delRes.ok) {
+          const serverDeleted: string[] = await delRes.json();
+          if (Array.isArray(serverDeleted) && serverDeleted.length > 0) {
+            setDeletedProductIds((prev) => {
+              const combined = new Set([...Array.from(prev), ...serverDeleted]);
+              try {
+                localStorage.setItem(DELETED_IDS_STORAGE_KEY, JSON.stringify(Array.from(combined)));
+              } catch {}
+              deletedProductIdsRef.current = combined;
+              return combined;
+            });
+          }
+        }
+      } catch (err) {}
+
+      // 2. Initial server sync to load all persistent server products
       let serverProducts: Product[] = [];
       try {
         const res = await fetch('/api/products');
@@ -473,18 +493,26 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
           if (Array.isArray(list) && list.length > 0) {
             serverProducts = list;
             setProducts((prev) => {
+              const activeDeleted = deletedProductIdsRef.current;
               const catalogMap = new Map<string, Product>();
+
+              // Base initial products (only if not deleted)
               INITIAL_PRODUCTS.forEach((ip) => {
-                if (!deletedProductIds.has(ip.id)) catalogMap.set(ip.id, { ...ip });
+                if (!activeDeleted.has(ip.id)) catalogMap.set(ip.id, { ...ip });
               });
+
+              // Keep local products already in state
               prev.forEach((cp) => {
-                if (!deletedProductIds.has(cp.id)) catalogMap.set(cp.id, cp);
+                if (!activeDeleted.has(cp.id)) catalogMap.set(cp.id, cp);
               });
+
+              // Overlay persistent server products (user uploads & custom courses)
               serverProducts.forEach((p) => {
-                if (p && p.id && !deletedProductIds.has(p.id)) {
+                if (p && p.id && !activeDeleted.has(p.id)) {
                   catalogMap.set(p.id, { ...(catalogMap.get(p.id) || {}), ...p });
                 }
               });
+
               const merged = Array.from(catalogMap.values());
               saveProductsToLocalCache(merged);
               return merged;
@@ -495,7 +523,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         console.warn('Initial server products fetch notice:', err);
       }
 
-      // 2. REAL-TIME FIRESTORE LISTENER (Instant sync across devices and cloud)
+      // 3. REAL-TIME FIRESTORE LISTENER (safe against NOT_FOUND error)
       try {
         unsubProducts = onSnapshot(
           collection(db, 'products'),
@@ -512,33 +540,30 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
               }
             });
 
-            // Comprehensive catalog merging:
-            // 1. Start with INITIAL_PRODUCTS as baseline
+            const activeDeleted = deletedProductIdsRef.current;
             const catalogMap = new Map<string, Product>();
+
             INITIAL_PRODUCTS.forEach((ip) => {
-              if (!deletedProductIds.has(ip.id)) {
+              if (!activeDeleted.has(ip.id)) {
                 catalogMap.set(ip.id, { ...ip });
               }
             });
 
-            // 2. Overlay server products (contains user edits or custom additions)
             serverProducts.forEach((p) => {
-              if (p && typeof p.id === 'string' && p.id.trim() && !deletedProductIds.has(p.id)) {
+              if (p && typeof p.id === 'string' && p.id.trim() && !activeDeleted.has(p.id)) {
                 catalogMap.set(p.id, { ...(catalogMap.get(p.id) || {}), ...p });
               }
             });
 
-            // 3. Overlay Firestore products (supreme cloud source of truth)
             firestoreProducts.forEach((p) => {
-              if (p && typeof p.id === 'string' && p.id.trim() && !deletedProductIds.has(p.id)) {
+              if (p && typeof p.id === 'string' && p.id.trim() && !activeDeleted.has(p.id)) {
                 catalogMap.set(p.id, { ...(catalogMap.get(p.id) || {}), ...p });
               }
             });
 
-            // 4. Retain any active user products from state that aren't marked deleted
             setProducts((currentProds) => {
               currentProds.forEach((cp) => {
-                if (cp && cp.id && !deletedProductIds.has(cp.id) && !catalogMap.has(cp.id)) {
+                if (cp && cp.id && !activeDeleted.has(cp.id) && !catalogMap.has(cp.id)) {
                   catalogMap.set(cp.id, cp);
                 }
               });
@@ -560,7 +585,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
             });
           },
           (error) => {
-            console.warn('Real-time products sync notice:', error);
+            console.warn('Firestore real-time listener notice (relying on server DB):', error.message);
           }
         );
       } catch (err) {
@@ -702,6 +727,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setDeletedProductIds((prev) => {
       const next = new Set(prev);
       next.add(id);
+      deletedProductIdsRef.current = next;
       try {
         localStorage.setItem(DELETED_IDS_STORAGE_KEY, JSON.stringify(Array.from(next)));
       } catch {}

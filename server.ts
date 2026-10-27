@@ -837,6 +837,10 @@ app.get('/api/products', async (_req, res) => {
   res.json(prods);
 });
 
+app.get('/api/deleted-ids', async (_req, res) => {
+  res.json(store.deletedProductIds || []);
+});
+
 app.post('/api/products', async (req, res) => {
   try {
     const product = req.body;

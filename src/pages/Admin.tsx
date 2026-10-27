@@ -687,114 +687,85 @@ export default function Admin() {
     });
   };
 
-  // Ultra-fast, non-blocking native streaming upload with real-time progress tracking
-  const uploadFileToServer = (
+  // Ultra-reliable server streaming upload with progress tracking and permanent URL return
+  const uploadFileToServer = async (
     file: File | Blob,
     productId: string,
     fileType: 'pdf' | 'image',
     fileNameOverride?: string
   ): Promise<{ fileUrl: string; fileName: string; size?: number }> => {
-    return new Promise((resolve, reject) => {
-      const originalName = fileNameOverride || (file as File).name || (fileType === 'pdf' ? 'document.pdf' : 'image.jpg');
-      setUploadProgressPercent(5);
+    const originalName = fileNameOverride || (file as File).name || (fileType === 'pdf' ? 'document.pdf' : 'image.jpg');
+    setUploadProgressPercent(10);
+    setUploadStatusText(`Uploading ${originalName}...`);
 
-      const xhr = new XMLHttpRequest();
+    // 1. Direct FormData upload to /api/upload-file
+    try {
+      const formData = new FormData();
+      formData.append('productId', productId);
+      formData.append('fileType', fileType);
+      formData.append('file', file, originalName);
 
-      xhr.upload.onprogress = (event) => {
-        if (event.lengthComputable && event.total > 0) {
-          const percent = Math.min(Math.round((event.loaded / event.total) * 100), 99);
-          const loadedMb = (event.loaded / (1024 * 1024)).toFixed(1);
-          const totalMb = (event.total / (1024 * 1024)).toFixed(1);
-          setUploadProgressPercent(percent);
-          setUploadStatusText(`Uploading ${percent}% (${loadedMb}MB / ${totalMb}MB)...`);
-        }
-      };
+      setUploadProgressPercent(40);
+      const res = await fetch('/api/upload-file', {
+        method: 'POST',
+        body: formData
+      });
 
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) {
-          try {
-            const data = JSON.parse(xhr.responseText);
-            if (data.fileUrl) {
-              setUploadProgressPercent(100);
-              resolve(data);
-              return;
-            }
-          } catch (parseErr) {}
-        }
-        triggerFallback();
-      };
-
-      xhr.onerror = () => {
-        triggerFallback();
-      };
-
-      xhr.ontimeout = () => {
-        triggerFallback();
-      };
-
-      try {
-        const formData = new FormData();
-        formData.append('file', file, originalName);
-        formData.append('productId', productId);
-        formData.append('fileType', fileType);
-
-        xhr.open('POST', '/api/upload-file', true);
-        xhr.timeout = 60000; // 60s
-        xhr.send(formData);
-      } catch (sendErr) {
-        triggerFallback();
-      }
-
-      function triggerFallback() {
-        // Fast, asynchronous native FileReader fallback (no blocking JS loops)
-        try {
-          const reader = new FileReader();
-          reader.onload = async () => {
-            const base64Data = reader.result as string;
-            setUploadProgressPercent(90);
-            try {
-              const res = await fetch('/api/upload-file', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  fileData: base64Data,
-                  fileName: originalName,
-                  fileType: file.type || (fileType === 'pdf' ? 'application/pdf' : 'image/jpeg'),
-                  productId
-                })
-              });
-              if (res.ok) {
-                const data = await res.json();
-                if (data.fileUrl) {
-                  setUploadProgressPercent(100);
-                  resolve(data);
-                  return;
-                }
-              }
-            } catch {}
-            // Static hosting fallback: avoid massive 20MB base64 in state
-            let fallbackUrl = base64Data;
-            try {
-              if (fileType === 'pdf' || (file as File).size > 500 * 1024) {
-                fallbackUrl = URL.createObjectURL(file);
-              }
-            } catch {}
-            setUploadProgressPercent(100);
-            resolve({
-              fileUrl: fallbackUrl,
-              fileName: originalName,
-              size: (file as File).size || 0
-            });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.fileUrl) {
+          setUploadProgressPercent(100);
+          setUploadStatusText(`✓ Uploaded ${originalName}`);
+          return {
+            fileUrl: data.fileUrl,
+            fileName: data.fileName || originalName,
+            size: data.size || (file as File).size || 0
           };
-          reader.onerror = () => {
-            reject(new Error(`File upload error: ${originalName}`));
-          };
-          reader.readAsDataURL(file);
-        } catch (err: any) {
-          reject(err);
         }
       }
-    });
+    } catch (err) {
+      console.warn('FormData upload error, attempting JSON base64 fallback:', err);
+    }
+
+    // 2. Fallback via JSON Base64 to /api/upload-file
+    try {
+      setUploadProgressPercent(60);
+      const base64Data = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      setUploadProgressPercent(85);
+      const res = await fetch('/api/upload-file', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileData: base64Data,
+          fileName: originalName,
+          fileType: file.type || (fileType === 'pdf' ? 'application/pdf' : 'image/jpeg'),
+          productId
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.fileUrl) {
+          setUploadProgressPercent(100);
+          setUploadStatusText(`✓ Uploaded ${originalName}`);
+          return {
+            fileUrl: data.fileUrl,
+            fileName: data.fileName || originalName,
+            size: data.size || (file as File).size || 0
+          };
+        }
+      }
+    } catch (base64Err) {
+      console.error('Base64 upload error:', base64Err);
+    }
+
+    throw new Error(`Failed to upload ${originalName} to server. Please check file size or network.`);
   };
 
   // Handle Cover Image File Selection from Mobile Gallery / PC with instant upload & compression
@@ -1463,17 +1434,11 @@ export default function Admin() {
 
           <div className="flex items-center gap-2.5">
             <button
-              onClick={() => setResetConfirmOpen(true)}
-              className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 hover:text-white px-3 py-1.5 rounded-lg border border-gray-700 flex items-center gap-1.5 transition-colors"
-            >
-              <RotateCcw size={13} /> Reset Dummies
-            </button>
-            <button
               onClick={() => {
                 toggleAdminMode(false);
                 navigate('/');
               }}
-              className="text-xs bg-red-600/90 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg font-bold transition-colors"
+              className="text-xs bg-red-600/90 hover:bg-red-600 text-white px-3 py-1.5 rounded-lg font-bold transition-colors cursor-pointer"
             >
               Exit Admin
             </button>
