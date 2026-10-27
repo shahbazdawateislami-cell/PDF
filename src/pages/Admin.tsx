@@ -119,7 +119,12 @@ export default function Admin() {
       setHeroBgOpacity(heroConfig.backgroundOverlayOpacity ?? 0.55);
       setHeroStackedCards(
         heroConfig.stackedCards && heroConfig.stackedCards.length > 0
-          ? heroConfig.stackedCards
+          ? heroConfig.stackedCards.map((c, idx) => ({
+              id: c.id || `card-${idx + 1}`,
+              title: c.title || "",
+              image: c.image || "",
+              link: c.link || ""
+            }))
           : [
               { id: 'card-1', title: products[0]?.title || 'ChatGPT & AI Tools Master Guide', image: products[0]?.coverImage || '', link: `/product/${products[0]?.id || ''}` },
               { id: 'card-2', title: products[1]?.title || 'Canva Pro Design Mastery', image: products[1]?.coverImage || '', link: `/product/${products[1]?.id || ''}` },
@@ -134,7 +139,7 @@ export default function Admin() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) {
-      alert('Photo size 8MB se kam honi chahiye');
+      showNotify('⚠️ Photo size 8MB se kam honi chahiye');
       return;
     }
     const reader = new FileReader();
@@ -152,7 +157,7 @@ export default function Admin() {
     const file = e.target.files?.[0];
     if (!file) return;
     if (file.size > 8 * 1024 * 1024) {
-      alert('Photo size 8MB se kam honi chahiye');
+      showNotify('⚠️ Photo size 8MB se kam honi chahiye');
       return;
     }
     const reader = new FileReader();
@@ -274,7 +279,7 @@ export default function Admin() {
   const [uploadedPdfFile, setUploadedPdfFile] = useState<File | null>(null);
   const [uploadedSampleFiles, setUploadedSampleFiles] = useState<File[]>([]);
   const [uploadedPdfData, setUploadedPdfData] = useState<string | null>(null);
-  const [uploadedPdfUrl, setUploadedPdfUrl] = useState<string | null>(null);
+  const [uploadedPdfUrl, setUploadedPdfUrl] = useState<string>('');
   const [isSubmittingProduct, setIsSubmittingProduct] = useState(false);
   const [uploadStatusText, setUploadStatusText] = useState('');
   const [isUploadingPdf, setIsUploadingPdf] = useState(false);
@@ -987,7 +992,7 @@ export default function Admin() {
     setUploadedPdfName(null);
     setUploadedPdfFile(null);
     setUploadedPdfData(null);
-    setUploadedPdfUrl(null);
+    setUploadedPdfUrl('');
     setUploadedSampleFiles([]);
     setUploadStatusText('');
     setFormPagesCount(120);
@@ -1017,7 +1022,7 @@ export default function Admin() {
     setUploadedPdfName(p.pdfFileName || (p.pdfUrl ? 'Existing Uploaded PDF' : null));
     setUploadedPdfFile(null);
     setUploadedPdfData(null);
-    setUploadedPdfUrl(p.pdfUrl || null);
+    setUploadedPdfUrl(p.pdfUrl || '');
     setPdfUploadSource(p.pdfUrl && (p.pdfUrl.startsWith('http://') || p.pdfUrl.startsWith('https://')) ? 'url' : 'device');
     setUploadedSampleFiles([]);
     setUploadStatusText('');
@@ -1345,7 +1350,7 @@ export default function Admin() {
                 </label>
                 <input
                   type="text"
-                  value={loginId}
+                  value={loginId ?? ""}
                   onChange={(e) => {
                     setLoginId(e.target.value);
                     setLoginError('');
@@ -1364,7 +1369,7 @@ export default function Admin() {
                 <div className="relative">
                   <input
                     type={showPass ? 'text' : 'password'}
-                    value={loginPassword}
+                    value={loginPassword ?? ""}
                     onChange={(e) => {
                       setLoginPassword(e.target.value);
                       setLoginError('');
@@ -1531,7 +1536,7 @@ export default function Admin() {
                   <span className="text-[11px] font-semibold text-gray-300 whitespace-nowrap">Kisi Ek Date Search:</span>
                   <input
                     type="date"
-                    value={customFilterDate}
+                    value={customFilterDate ?? ""}
                     onChange={(e) => {
                       setCustomFilterDate(e.target.value);
                       if (e.target.value) {
@@ -1754,7 +1759,7 @@ export default function Admin() {
                   <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
                   <input
                     type="text"
-                    value={searchQuery}
+                    value={searchQuery ?? ""}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Search product..."
                     className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-lg outline-none focus:border-blue-500"
@@ -1762,7 +1767,7 @@ export default function Admin() {
                 </div>
 
                 <select
-                  value={categoryFilter}
+                  value={categoryFilter ?? "all"}
                   onChange={(e) => setCategoryFilter(e.target.value)}
                   className="text-xs bg-gray-50 border border-gray-200 rounded-lg px-2.5 py-1.5 outline-none font-medium text-gray-700"
                 >
@@ -2136,7 +2141,7 @@ export default function Admin() {
                   <Calendar size={12} className="text-gray-400 shrink-0" />
                   <input
                     type="date"
-                    value={customFilterDate}
+                    value={customFilterDate ?? ""}
                     onChange={(e) => {
                       setCustomFilterDate(e.target.value);
                       if (e.target.value) {
@@ -2355,7 +2360,7 @@ export default function Admin() {
                 <Search size={15} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  value={couponSearch}
+                  value={couponSearch ?? ""}
                   onChange={(e) => setCouponSearch(e.target.value)}
                   placeholder="Coupon code ya description search karein (e.g. MASTER10, FLAT50)..."
                   className="w-full pl-9 pr-4 py-2 text-xs border border-gray-200 rounded-xl outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-200"
@@ -2365,7 +2370,7 @@ export default function Admin() {
               <div className="flex items-center gap-2 flex-wrap">
                 {/* Type Filter */}
                 <select
-                  value={couponFilterType}
+                  value={couponFilterType ?? "all"}
                   onChange={(e) => setCouponFilterType(e.target.value as any)}
                   className="px-3 py-2 text-xs border border-gray-200 rounded-xl bg-gray-50 font-bold text-gray-700 outline-none cursor-pointer"
                 >
@@ -2376,7 +2381,7 @@ export default function Admin() {
 
                 {/* Status Filter */}
                 <select
-                  value={couponFilterStatus}
+                  value={couponFilterStatus ?? "all"}
                   onChange={(e) => setCouponFilterStatus(e.target.value as any)}
                   className="px-3 py-2 text-xs border border-gray-200 rounded-xl bg-gray-50 font-bold text-gray-700 outline-none cursor-pointer"
                 >
@@ -2669,7 +2674,7 @@ export default function Admin() {
                       </span>
                       <input
                         type="text"
-                        value={heroBgImage}
+                        value={heroBgImage ?? ""}
                         onChange={(e) => setHeroBgImage(e.target.value)}
                         placeholder="https://images.unsplash.com/... ya direct image URL"
                         className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs font-mono outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 bg-white"
@@ -2692,7 +2697,7 @@ export default function Admin() {
                       min="0.1"
                       max="0.85"
                       step="0.05"
-                      value={heroBgOpacity}
+                      value={heroBgOpacity ?? 0.55}
                       onChange={(e) => setHeroBgOpacity(parseFloat(e.target.value))}
                       className="w-full accent-blue-600 cursor-pointer"
                     />
@@ -2840,7 +2845,7 @@ export default function Admin() {
                           </label>
                           <input
                             type="text"
-                            value={card.image}
+                            value={card.image || ""}
                             onChange={(e) => handleCardFieldChange(card.id, 'image', e.target.value)}
                             placeholder="https://... cover photo link"
                             className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-[11px] font-mono outline-none focus:border-blue-500 bg-white"
@@ -2854,7 +2859,7 @@ export default function Admin() {
                           </label>
                           <input
                             type="text"
-                            value={card.title}
+                            value={card.title || ""}
                             onChange={(e) => handleCardFieldChange(card.id, 'title', e.target.value)}
                             placeholder="e.g. AI Prompts Guide"
                             className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs outline-none focus:border-blue-500 bg-white"
@@ -2869,7 +2874,7 @@ export default function Admin() {
                           </label>
                           <input
                             type="text"
-                            value={card.link}
+                            value={card.link || ""}
                             onChange={(e) => handleCardFieldChange(card.id, 'link', e.target.value)}
                             placeholder="/product/chatgpt-ai... ya https://..."
                             className="w-full px-2.5 py-1.5 border border-gray-300 rounded-lg text-xs font-mono outline-none focus:border-blue-500 bg-white"
@@ -2882,11 +2887,10 @@ export default function Admin() {
                             ⚡ Quick Select From Store:
                           </label>
                           <select
-                            defaultValue=""
+                            value=""
                             onChange={(e) => {
                               if (e.target.value) {
                                 handleAutofillCardFromProduct(card.id, e.target.value);
-                                e.target.value = '';
                               }
                             }}
                             className="w-full px-2 py-1 border border-gray-300 rounded-lg text-[11px] text-gray-700 outline-none focus:border-blue-500 bg-white"
@@ -3026,7 +3030,7 @@ export default function Admin() {
                   <div className="relative">
                     <input
                       type="text"
-                      value={apiKeyId}
+                      value={apiKeyId ?? ""}
                       onChange={(e) => setApiKeyId(e.target.value)}
                       placeholder="e.g. rzp_live_xxxxxxxxxxxx ya rzp_test_xxxxxxxxxxxx"
                       required
@@ -3046,7 +3050,7 @@ export default function Admin() {
                   <div className="relative">
                     <input
                       type={showKeySecret ? 'text' : 'password'}
-                      value={apiKeySecret}
+                      value={apiKeySecret ?? ""}
                       onChange={(e) => setApiKeySecret(e.target.value)}
                       placeholder="Apna Razorpay Key Secret yahan paste karein"
                       className="w-full px-3.5 py-2.5 pr-10 rounded-xl border border-gray-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-xs font-mono text-gray-900 outline-none transition-all"
@@ -3071,7 +3075,7 @@ export default function Admin() {
                   </label>
                   <input
                     type="text"
-                    value={apiWebhookSecret}
+                    value={apiWebhookSecret ?? ""}
                     onChange={(e) => setApiWebhookSecret(e.target.value)}
                     placeholder="e.g. your_webhook_secret_here"
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-200 text-xs font-mono text-gray-900 outline-none transition-all"
@@ -3167,7 +3171,7 @@ export default function Admin() {
                     <div className="flex gap-2">
                       <input
                         type="url"
-                        value={testGdriveUrl}
+                        value={testGdriveUrl ?? ""}
                         onChange={(e) => setTestGdriveUrl(e.target.value)}
                         placeholder="e.g. https://drive.google.com/file/d/1A2B3C.../view?usp=sharing"
                         className="flex-1 px-3 py-2 bg-white rounded-lg border border-emerald-300 text-xs font-mono outline-none focus:ring-1 focus:ring-emerald-500"
@@ -3210,7 +3214,7 @@ export default function Admin() {
                       </label>
                       <input
                         type="text"
-                        value={cloudinaryCloudName}
+                        value={cloudinaryCloudName ?? ""}
                         onChange={(e) => setCloudinaryCloudName(e.target.value)}
                         placeholder="e.g. your_cloud_name"
                         className="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono outline-none focus:border-indigo-500"
@@ -3222,7 +3226,7 @@ export default function Admin() {
                       </label>
                       <input
                         type="text"
-                        value={cloudinaryUploadPreset}
+                        value={cloudinaryUploadPreset ?? ""}
                         onChange={(e) => setCloudinaryUploadPreset(e.target.value)}
                         placeholder="e.g. ml_default ya pdf_upload"
                         className="w-full px-3 py-2 rounded-xl border border-gray-300 text-xs font-mono outline-none focus:border-indigo-500"
@@ -3301,7 +3305,7 @@ export default function Admin() {
                 <div className="space-y-1.5">
                   <input
                     type="url"
-                    value={quickPdfLink}
+                    value={quickPdfLink ?? ""}
                     onChange={(e) => {
                       const val = e.target.value.trim();
                       const formatted = formatCloudPdfUrl(val);
@@ -3392,7 +3396,7 @@ export default function Admin() {
                 </label>
                 <input
                   type="text"
-                  value={quickPdfFileName}
+                  value={quickPdfFileName ?? ""}
                   onChange={(e) => setQuickPdfFileName(e.target.value)}
                   placeholder="e.g. Drawing_Sheet_3_Original.pdf"
                   className="w-full px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:border-indigo-500 font-mono"
@@ -3523,7 +3527,7 @@ export default function Admin() {
                 <label className="block font-bold text-gray-700 mb-1">Product Title</label>
                 <input
                   type="text"
-                  value={formTitle}
+                  value={formTitle ?? ""}
                   onChange={(e) => setFormTitle(e.target.value)}
                   required
                   placeholder="e.g. Masterclass on AI Prompts"
@@ -3536,7 +3540,7 @@ export default function Admin() {
                 <div>
                   <label className="block font-bold text-gray-700 mb-1">Category</label>
                   <select
-                    value={formCategory}
+                    value={formCategory ?? "AI Tools"}
                     onChange={(e) => setFormCategory(e.target.value)}
                     className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500"
                   >
@@ -3549,7 +3553,7 @@ export default function Admin() {
                   <label className="block font-bold text-gray-700 mb-1">Badge (Optional)</label>
                   <input
                     type="text"
-                    value={formBadge}
+                    value={formBadge ?? ""}
                     onChange={(e) => setFormBadge(e.target.value)}
                     placeholder="e.g. Bestseller, New, 50% OFF"
                     className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500"
@@ -3563,7 +3567,7 @@ export default function Admin() {
                   <label className="block font-bold text-gray-700 mb-1">Sale Price (₹)</label>
                   <input
                     type="number"
-                    value={formPrice}
+                    value={formPrice ?? 0}
                     onChange={(e) => setFormPrice(Number(e.target.value))}
                     required
                     className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500"
@@ -3573,7 +3577,7 @@ export default function Admin() {
                   <label className="block font-bold text-gray-700 mb-1">Original Price (₹)</label>
                   <input
                     type="number"
-                    value={formOldPrice}
+                    value={formOldPrice ?? 0}
                     onChange={(e) => setFormOldPrice(Number(e.target.value))}
                     required
                     className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500"
@@ -3586,7 +3590,7 @@ export default function Admin() {
                     step="0.1"
                     min="1"
                     max="5"
-                    value={formRating}
+                    value={formRating ?? 4.8}
                     onChange={(e) => setFormRating(Number(e.target.value))}
                     className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500"
                   />
@@ -3632,7 +3636,7 @@ export default function Admin() {
                     <div className="space-y-1.5">
                       <input
                         type="url"
-                        value={formCoverImage || ''}
+                        value={formCoverImage ?? ''}
                         onChange={(e) => {
                           const val = e.target.value.trim();
                           setFormCoverImage(val);
@@ -3724,7 +3728,7 @@ export default function Admin() {
                     <div className="space-y-1.5">
                       <input
                         type="url"
-                        value={uploadedPdfUrl || ''}
+                        value={uploadedPdfUrl ?? ''}
                         onChange={(e) => {
                           const val = e.target.value.trim();
                           const formatted = formatCloudPdfUrl(val);
@@ -3927,7 +3931,7 @@ export default function Admin() {
                   <label className="block font-bold text-gray-700 mb-1">PDF Total Pages</label>
                   <input
                     type="number"
-                    value={formPagesCount}
+                    value={formPagesCount ?? 0}
                     onChange={(e) => setFormPagesCount(Number(e.target.value))}
                     className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500"
                   />
@@ -3936,7 +3940,7 @@ export default function Admin() {
                   <label className="block font-bold text-gray-700 mb-1">Language</label>
                   <input
                     type="text"
-                    value={formLanguage}
+                    value={formLanguage ?? ""}
                     onChange={(e) => setFormLanguage(e.target.value)}
                     placeholder="e.g. Hindi + English"
                     className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500"
@@ -3947,7 +3951,7 @@ export default function Admin() {
               <div>
                 <label className="block font-bold text-gray-700 mb-1">Short Description</label>
                 <textarea
-                  value={formDescription}
+                  value={formDescription ?? ""}
                   onChange={(e) => setFormDescription(e.target.value)}
                   rows={2}
                   className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500"
@@ -3959,7 +3963,7 @@ export default function Admin() {
                   Highlights &amp; Bullet Points (1 per line)
                 </label>
                 <textarea
-                  value={formHighlights}
+                  value={formHighlights ?? ""}
                   onChange={(e) => setFormHighlights(e.target.value)}
                   rows={3}
                   placeholder="Step by step practical guide&#10;100+ useful prompts&#10;Real life examples"
@@ -4037,7 +4041,7 @@ export default function Admin() {
                 <label className="block font-bold text-gray-700 mb-1">Bundle Title</label>
                 <input
                   type="text"
-                  value={bundleTitle}
+                  value={bundleTitle ?? ""}
                   onChange={(e) => setBundleTitle(e.target.value)}
                   required
                   placeholder="e.g. Solopreneur Mega Combo (4 in 1)"
@@ -4049,7 +4053,7 @@ export default function Admin() {
                 <label className="block font-bold text-gray-700 mb-1">Subtitle / Summary</label>
                 <input
                   type="text"
-                  value={bundleSubtitle}
+                  value={bundleSubtitle ?? ""}
                   onChange={(e) => setBundleSubtitle(e.target.value)}
                   placeholder="e.g. AI + Marketing + Canva + Freelancing"
                   className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500"
@@ -4061,7 +4065,7 @@ export default function Admin() {
                   <label className="block font-bold text-gray-700 mb-1">Bundle Deal Price (₹)</label>
                   <input
                     type="number"
-                    value={bundlePrice}
+                    value={bundlePrice ?? 0}
                     onChange={(e) => setBundlePrice(Number(e.target.value))}
                     required
                     className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500"
@@ -4071,7 +4075,7 @@ export default function Admin() {
                   <label className="block font-bold text-gray-700 mb-1">Original Price (₹)</label>
                   <input
                     type="number"
-                    value={bundleOldPrice}
+                    value={bundleOldPrice ?? 0}
                     onChange={(e) => setBundleOldPrice(Number(e.target.value))}
                     required
                     className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500"
@@ -4081,7 +4085,7 @@ export default function Admin() {
                   <label className="block font-bold text-gray-700 mb-1">Badge</label>
                   <input
                     type="text"
-                    value={bundleBadge}
+                    value={bundleBadge ?? ""}
                     onChange={(e) => setBundleBadge(e.target.value)}
                     placeholder="e.g. SAVE 70%"
                     className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500"
@@ -4132,7 +4136,7 @@ export default function Admin() {
                     </div>
                     <input
                       type="url"
-                      value={bundleCoverImage}
+                      value={bundleCoverImage ?? ""}
                       onChange={(e) => setBundleCoverImage(e.target.value)}
                       placeholder="Ya phir Image URL paste karein..."
                       className="w-full px-3 py-1.5 border rounded-lg text-xs outline-none focus:border-blue-500"
@@ -4247,7 +4251,7 @@ export default function Admin() {
               <div>
                 <label className="block font-bold text-gray-700 mb-1">Description</label>
                 <textarea
-                  value={bundleDescription}
+                  value={bundleDescription ?? ""}
                   onChange={(e) => setBundleDescription(e.target.value)}
                   rows={2}
                   className="w-full px-3 py-2 border rounded-xl text-xs outline-none focus:border-blue-500"
@@ -4373,7 +4377,7 @@ export default function Admin() {
                 <input
                   type="text"
                   readOnly
-                  value={adLinkModalData.checkoutUrl}
+                  value={adLinkModalData?.checkoutUrl ?? ""}
                   className="flex-1 px-3 py-2 bg-white rounded-xl border border-emerald-300 text-[11px] font-mono text-gray-800 select-all outline-none"
                 />
                 <button
@@ -4412,7 +4416,7 @@ export default function Admin() {
                   <input
                     type="text"
                     readOnly
-                    value={adLinkModalData.landingUrl}
+                    value={adLinkModalData?.landingUrl ?? ""}
                     className="flex-1 px-3 py-2 bg-white rounded-xl border border-gray-300 text-[11px] font-mono text-gray-800 select-all outline-none"
                   />
                   <button
@@ -4521,7 +4525,7 @@ export default function Admin() {
                 <input
                   type="text"
                   required
-                  value={formCouponCode}
+                  value={formCouponCode ?? ""}
                   onChange={(e) => setFormCouponCode(e.target.value.toUpperCase())}
                   placeholder="e.g. SPECIAL30"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 font-mono text-sm uppercase tracking-wider font-bold focus:border-purple-600 focus:ring-1 focus:ring-purple-200 outline-none"
@@ -4573,7 +4577,7 @@ export default function Admin() {
                     required
                     min={1}
                     max={formCouponType === 'flat' ? 5000 : 100}
-                    value={formCouponValue}
+                    value={formCouponValue ?? 0}
                     onChange={(e) => setFormCouponValue(Number(e.target.value))}
                     className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 font-bold text-sm focus:border-purple-600 focus:ring-1 focus:ring-purple-200 outline-none"
                   />
@@ -4592,7 +4596,7 @@ export default function Admin() {
                   <input
                     type="number"
                     min={0}
-                    value={formCouponMinOrder}
+                    value={formCouponMinOrder ?? 0}
                     onChange={(e) => setFormCouponMinOrder(Number(e.target.value))}
                     placeholder="0 = Har cart par lagu"
                     className="w-full px-3.5 py-2 rounded-xl border border-gray-300 text-xs font-bold focus:border-purple-600 focus:ring-1 focus:ring-purple-200 outline-none"
@@ -4606,7 +4610,7 @@ export default function Admin() {
                   </label>
                   <input
                     type="date"
-                    value={formCouponExpiry}
+                    value={formCouponExpiry ?? ""}
                     onChange={(e) => setFormCouponExpiry(e.target.value)}
                     className="w-full px-3.5 py-2 rounded-xl border border-gray-300 text-xs font-bold focus:border-purple-600 focus:ring-1 focus:ring-purple-200 outline-none"
                   />
@@ -4621,7 +4625,7 @@ export default function Admin() {
                 </label>
                 <input
                   type="text"
-                  value={formCouponDesc}
+                  value={formCouponDesc ?? ""}
                   onChange={(e) => setFormCouponDesc(e.target.value)}
                   placeholder="e.g. Special welcome discount on all guides"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-gray-300 text-xs focus:border-purple-600 focus:ring-1 focus:ring-purple-200 outline-none"
@@ -4705,7 +4709,7 @@ export default function Admin() {
                       </span>
                       <input
                         type="text"
-                        value={item.code}
+                        value={item.code ?? ""}
                         onChange={(e) => {
                           const val = e.target.value.toUpperCase();
                           setBulkCouponsList((prev) =>
@@ -4720,7 +4724,7 @@ export default function Admin() {
                     <div className="flex items-center gap-2">
                       {/* Type toggle */}
                       <select
-                        value={item.discountType}
+                        value={item.discountType ?? "percentage"}
                         onChange={(e) => {
                           const val = e.target.value as 'percentage' | 'flat';
                           setBulkCouponsList((prev) =>
@@ -4738,7 +4742,7 @@ export default function Admin() {
                         <span className="text-[11px] font-bold text-gray-500">Value:</span>
                         <input
                           type="number"
-                          value={item.value}
+                          value={item.value ?? 0}
                           onChange={(e) => {
                             const val = Number(e.target.value);
                             setBulkCouponsList((prev) =>
@@ -4757,7 +4761,7 @@ export default function Admin() {
                         <span className="text-[11px] font-bold text-gray-500">Min Cart:</span>
                         <input
                           type="number"
-                          value={item.minOrder}
+                          value={item.minOrder ?? 0}
                           onChange={(e) => {
                             const val = Number(e.target.value);
                             setBulkCouponsList((prev) =>
@@ -4772,7 +4776,7 @@ export default function Admin() {
 
                   <input
                     type="text"
-                    value={item.description}
+                    value={item.description ?? ""}
                     onChange={(e) => {
                       const val = e.target.value;
                       setBulkCouponsList((prev) =>

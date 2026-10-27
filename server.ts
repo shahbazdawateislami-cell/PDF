@@ -25,6 +25,10 @@ interface LocalStore {
   payments: Record<string, any>;
   products: Record<string, any>;
   deletedProductIds: string[];
+  bundles: Record<string, any>;
+  deletedBundleIds: string[];
+  productsInitialized?: boolean;
+  bundlesInitialized?: boolean;
   download_logs: any[];
 }
 
@@ -34,6 +38,8 @@ let store: LocalStore = {
   payments: {},
   products: {},
   deletedProductIds: [],
+  bundles: {},
+  deletedBundleIds: [],
   download_logs: []
 };
 
@@ -53,16 +59,57 @@ function loadStore() {
     if (!Array.isArray(store.deletedProductIds)) {
       store.deletedProductIds = [];
     }
+    if (!store.bundles || typeof store.bundles !== 'object') {
+      store.bundles = {};
+    }
+    if (!Array.isArray(store.deletedBundleIds)) {
+      store.deletedBundleIds = [];
+    }
 
-    // Seed baseline initial products if not already present and not deleted
-    const deletedSet = new Set(store.deletedProductIds);
     let changed = false;
-    INITIAL_PRODUCTS.forEach((p) => {
-      if (!deletedSet.has(p.id) && !store.products[p.id]) {
-        store.products[p.id] = { ...p };
-        changed = true;
-      }
-    });
+
+    // Seed baseline initial products ONLY IF never initialized before
+    if (!store.productsInitialized) {
+      INITIAL_PRODUCTS.forEach((p) => {
+        if (!store.products[p.id]) {
+          store.products[p.id] = { ...p };
+        }
+      });
+      store.productsInitialized = true;
+      changed = true;
+    }
+
+    // Seed baseline initial bundles ONLY IF never initialized before
+    if (!store.bundlesInitialized) {
+      INITIAL_BUNDLES.forEach((b) => {
+        if (!store.bundles[b.id]) {
+          store.bundles[b.id] = { ...b };
+        }
+      });
+      store.bundlesInitialized = true;
+      changed = true;
+    }
+
+    // Ensure any previously deleted product remains deleted
+    if (store.deletedProductIds.length > 0) {
+      store.deletedProductIds.forEach((id) => {
+        if (store.products[id]) {
+          delete store.products[id];
+          changed = true;
+        }
+      });
+    }
+
+    // Ensure any previously deleted bundle remains deleted
+    if (store.deletedBundleIds.length > 0) {
+      store.deletedBundleIds.forEach((id) => {
+        if (store.bundles[id]) {
+          delete store.bundles[id];
+          changed = true;
+        }
+      });
+    }
+
     if (changed) {
       persistStore();
     }
@@ -887,9 +934,78 @@ app.post('/api/products/reset', async (_req, res) => {
     INITIAL_PRODUCTS.forEach((p) => {
       store.products[p.id] = { ...p };
     });
+    store.productsInitialized = true;
     persistStore();
     console.log('[Products Reset to Baseline Defaults]');
     res.json({ success: true, count: Object.keys(store.products).length });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+// 8.1 Bundle CRUD Endpoints for Server Sync
+app.get('/api/bundles', async (_req, res) => {
+  const deletedSet = new Set(store.deletedBundleIds || []);
+  const bundlesList = Object.values(store.bundles || {}).filter((b: any) => b && b.id && !deletedSet.has(b.id));
+  res.json(bundlesList);
+});
+
+app.get('/api/deleted-bundle-ids', async (_req, res) => {
+  res.json(store.deletedBundleIds || []);
+});
+
+app.post('/api/bundles', async (req, res) => {
+  try {
+    const bundle = req.body;
+    if (!bundle?.id) {
+      bundle.id = `bundle-${Date.now()}`;
+    }
+    if (!store.bundles) store.bundles = {};
+    if (Array.isArray(store.deletedBundleIds)) {
+      store.deletedBundleIds = store.deletedBundleIds.filter((id) => id !== bundle.id);
+    }
+    store.bundles[bundle.id] = bundle;
+    store.bundlesInitialized = true;
+    persistStore();
+    console.log(`[Bundle Saved to Server DB] ${bundle.id} - ${bundle.title}`);
+    res.json({ success: true, bundle });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.delete('/api/bundles/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!Array.isArray(store.deletedBundleIds)) {
+      store.deletedBundleIds = [];
+    }
+    if (!store.deletedBundleIds.includes(id)) {
+      store.deletedBundleIds.push(id);
+    }
+    if (store.bundles && store.bundles[id]) {
+      delete store.bundles[id];
+    }
+    store.bundlesInitialized = true;
+    persistStore();
+    console.log(`[Bundle Deleted from Server DB] ${id}`);
+    res.json({ success: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message });
+  }
+});
+
+app.post('/api/bundles/reset', async (_req, res) => {
+  try {
+    store.deletedBundleIds = [];
+    store.bundles = {};
+    INITIAL_BUNDLES.forEach((b) => {
+      store.bundles[b.id] = { ...b };
+    });
+    store.bundlesInitialized = true;
+    persistStore();
+    console.log('[Bundles Reset to Baseline Defaults]');
+    res.json({ success: true, count: Object.keys(store.bundles).length });
   } catch (err: any) {
     res.status(500).json({ error: err?.message });
   }

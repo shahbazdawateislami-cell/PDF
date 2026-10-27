@@ -191,6 +191,9 @@ const ProductContext = createContext<ProductContextType | undefined>(undefined);
 const LOCAL_STORAGE_KEY = 'pdf_master_products_v3';
 const DELETED_IDS_STORAGE_KEY = 'pdf_master_deleted_ids_v1';
 const BUNDLES_STORAGE_KEY = 'pdf_master_bundles_v1';
+const DELETED_BUNDLE_IDS_STORAGE_KEY = 'pdf_master_deleted_bundle_ids_v1';
+const BUNDLES_INITIALIZED_KEY = 'pdf_master_bundles_initialized_v1';
+const PRODUCTS_INITIALIZED_KEY = 'pdf_master_products_initialized_v1';
 const COUPONS_STORAGE_KEY = 'pdf_master_coupons_v1';
 const CART_STORAGE_KEY = 'pdf_master_cart';
 const WISHLIST_STORAGE_KEY = 'pdf_master_wishlist';
@@ -212,12 +215,32 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   });
   const deletedProductIdsRef = useRef<Set<string>>(deletedProductIds);
   deletedProductIdsRef.current = deletedProductIds;
+
+  const [deletedBundleIds, setDeletedBundleIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem(DELETED_BUNDLE_IDS_STORAGE_KEY);
+      if (saved) {
+        const arr = JSON.parse(saved);
+        if (Array.isArray(arr)) return new Set(arr);
+      }
+    } catch {}
+    return new Set();
+  });
+  const deletedBundleIdsRef = useRef<Set<string>>(deletedBundleIds);
+  deletedBundleIdsRef.current = deletedBundleIds;
+
   const [products, setProducts] = useState<Product[]>(() => {
     try {
+      const isInit = localStorage.getItem(PRODUCTS_INITIALIZED_KEY);
       const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && isInit) return parsed;
+      }
+      if (!isInit) {
+        localStorage.setItem(PRODUCTS_INITIALIZED_KEY, 'true');
+        return INITIAL_PRODUCTS;
       }
     } catch (e) {
       console.warn('Failed to parse cached products', e);
@@ -227,11 +250,20 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [bundles, setBundles] = useState<Bundle[]>(() => {
     try {
+      const isInit = localStorage.getItem(BUNDLES_INITIALIZED_KEY);
       const saved = localStorage.getItem(BUNDLES_STORAGE_KEY);
-      if (saved) {
+      if (saved !== null) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        // If user deleted bundles and length is 0, respect empty array!
+        if (Array.isArray(parsed) && (parsed.length > 0 || isInit)) {
+          return parsed;
+        }
       }
+      if (!isInit) {
+        localStorage.setItem(BUNDLES_INITIALIZED_KEY, 'true');
+        return INITIAL_BUNDLES;
+      }
+      return [];
     } catch {}
     return INITIAL_BUNDLES;
   });
@@ -463,10 +495,11 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Real-time Bidirectional Sync with Firestore & Server
   useEffect(() => {
     let unsubProducts: (() => void) | null = null;
+    let unsubBundles: (() => void) | null = null;
     let unsubCoupons: (() => void) | null = null;
 
     async function initRealtimeSync() {
-      // 1. First fetch server deleted IDs so deleted dummy products stay permanently deleted
+      // 1. First fetch server deleted product IDs
       try {
         const delRes = await fetch('/api/deleted-ids');
         if (delRes.ok) {
@@ -478,6 +511,24 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 localStorage.setItem(DELETED_IDS_STORAGE_KEY, JSON.stringify(Array.from(combined)));
               } catch {}
               deletedProductIdsRef.current = combined;
+              return combined;
+            });
+          }
+        }
+      } catch (err) {}
+
+      // 1b. Fetch server deleted bundle IDs so deleted bundles stay permanently deleted
+      try {
+        const delBundleRes = await fetch('/api/deleted-bundle-ids');
+        if (delBundleRes.ok) {
+          const serverDeletedBundles: string[] = await delBundleRes.json();
+          if (Array.isArray(serverDeletedBundles) && serverDeletedBundles.length > 0) {
+            setDeletedBundleIds((prev) => {
+              const combined = new Set([...Array.from(prev), ...serverDeletedBundles]);
+              try {
+                localStorage.setItem(DELETED_BUNDLE_IDS_STORAGE_KEY, JSON.stringify(Array.from(combined)));
+              } catch {}
+              deletedBundleIdsRef.current = combined;
               return combined;
             });
           }
@@ -501,15 +552,18 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 if (!activeDeleted.has(ip.id)) catalogMap.set(ip.id, { ...ip });
               });
 
-              // Keep local products already in state
-              prev.forEach((cp) => {
-                if (!activeDeleted.has(cp.id)) catalogMap.set(cp.id, cp);
-              });
-
-              // Overlay persistent server products (user uploads & custom courses)
+              // Overlay server products (has user additions/edits)
               serverProducts.forEach((p) => {
                 if (p && p.id && !activeDeleted.has(p.id)) {
                   catalogMap.set(p.id, { ...(catalogMap.get(p.id) || {}), ...p });
+                }
+              });
+
+              // Keep local state additions/edits (crucial so user edits are not lost!)
+              prev.forEach((cp) => {
+                if (cp && cp.id && !activeDeleted.has(cp.id)) {
+                  const existing = catalogMap.get(cp.id);
+                  catalogMap.set(cp.id, existing ? { ...existing, ...cp } : cp);
                 }
               });
 
@@ -523,7 +577,54 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
         console.warn('Initial server products fetch notice:', err);
       }
 
-      // 3. REAL-TIME FIRESTORE LISTENER (safe against NOT_FOUND error)
+      // 2b. Initial server sync to load all persistent server bundles
+      let serverBundles: Bundle[] = [];
+      try {
+        const bRes = await fetch('/api/bundles');
+        if (bRes.ok) {
+          const list: Bundle[] = await bRes.json();
+          if (Array.isArray(list)) {
+            serverBundles = list;
+            setBundles((prev) => {
+              const activeDeletedBundles = deletedBundleIdsRef.current;
+              const bundleMap = new Map<string, Bundle>();
+
+              // Base initial bundles (only if not deleted)
+              INITIAL_BUNDLES.forEach((ib) => {
+                if (!activeDeletedBundles.has(ib.id)) {
+                  bundleMap.set(ib.id, { ...ib });
+                }
+              });
+
+              // Overlay server bundles (has user additions/edits)
+              serverBundles.forEach((b) => {
+                if (b && b.id && !activeDeletedBundles.has(b.id)) {
+                  bundleMap.set(b.id, { ...(bundleMap.get(b.id) || {}), ...b });
+                }
+              });
+
+              // Keep local state additions/edits (crucial so user edits are not lost!)
+              prev.forEach((cb) => {
+                if (cb && cb.id && !activeDeletedBundles.has(cb.id)) {
+                  const existing = bundleMap.get(cb.id);
+                  bundleMap.set(cb.id, existing ? { ...existing, ...cb } : cb);
+                }
+              });
+
+              const mergedBundles = Array.from(bundleMap.values());
+              try {
+                localStorage.setItem(BUNDLES_STORAGE_KEY, JSON.stringify(mergedBundles));
+                localStorage.setItem(BUNDLES_INITIALIZED_KEY, 'true');
+              } catch {}
+              return mergedBundles;
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Initial server bundles fetch notice:', err);
+      }
+
+      // 3. REAL-TIME FIRESTORE LISTENER FOR PRODUCTS
       try {
         unsubProducts = onSnapshot(
           collection(db, 'products'),
@@ -562,14 +663,15 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
             });
 
             setProducts((currentProds) => {
+              // Preserve user modifications and edits from current state
               currentProds.forEach((cp) => {
-                if (cp && cp.id && !activeDeleted.has(cp.id) && !catalogMap.has(cp.id)) {
-                  catalogMap.set(cp.id, cp);
+                if (cp && cp.id && !activeDeleted.has(cp.id)) {
+                  const existing = catalogMap.get(cp.id);
+                  catalogMap.set(cp.id, existing ? { ...existing, ...cp } : cp);
                 }
               });
 
               const allProductsList = Array.from(catalogMap.values());
-              // Sort: Newly uploaded PDFs first, then remaining catalog
               allProductsList.sort((a, b) => {
                 const aIsPdf = a.id.startsWith('pdf-');
                 const bIsPdf = b.id.startsWith('pdf-');
@@ -591,6 +693,65 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
       } catch (err) {
         console.warn('Could not attach firestore products onSnapshot:', err);
       }
+
+      // 3b. REAL-TIME FIRESTORE LISTENER FOR BUNDLES
+      try {
+        unsubBundles = onSnapshot(
+          collection(db, 'bundles'),
+          (snapshot) => {
+            if (!snapshot.empty) {
+              const firestoreBundles: Bundle[] = [];
+              snapshot.forEach((d) => {
+                const data = d.data();
+                if (data) {
+                  const docId = (typeof data.id === 'string' && data.id.trim()) ? data.id : d.id;
+                  firestoreBundles.push({
+                    ...data,
+                    id: docId
+                  } as Bundle);
+                }
+              });
+
+              const activeDeletedBundles = deletedBundleIdsRef.current;
+              const bundleMap = new Map<string, Bundle>();
+
+              INITIAL_BUNDLES.forEach((ib) => {
+                if (!activeDeletedBundles.has(ib.id)) {
+                  bundleMap.set(ib.id, { ...ib });
+                }
+              });
+
+              serverBundles.forEach((b) => {
+                if (b && typeof b.id === 'string' && b.id.trim() && !activeDeletedBundles.has(b.id)) {
+                  bundleMap.set(b.id, { ...(bundleMap.get(b.id) || {}), ...b });
+                }
+              });
+
+              firestoreBundles.forEach((b) => {
+                if (b && typeof b.id === 'string' && b.id.trim() && !activeDeletedBundles.has(b.id)) {
+                  bundleMap.set(b.id, { ...(bundleMap.get(b.id) || {}), ...b });
+                }
+              });
+
+              setBundles((currentBundles) => {
+                currentBundles.forEach((cb) => {
+                  if (cb && cb.id && !activeDeletedBundles.has(cb.id)) {
+                    const existing = bundleMap.get(cb.id);
+                    bundleMap.set(cb.id, existing ? { ...existing, ...cb } : cb);
+                  }
+                });
+
+                const allBundlesList = Array.from(bundleMap.values());
+                try {
+                  localStorage.setItem(BUNDLES_STORAGE_KEY, JSON.stringify(allBundlesList));
+                } catch {}
+                return allBundlesList;
+              });
+            }
+          },
+          (err) => console.warn('Bundles onSnapshot notice:', err)
+        );
+      } catch (e) {}
 
       // Sync hero banner config from Firestore
       try {
@@ -637,6 +798,7 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     return () => {
       if (unsubProducts) unsubProducts();
+      if (unsubBundles) unsubBundles();
       if (unsubCoupons) unsubCoupons();
     };
   }, []);
@@ -740,6 +902,14 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return nextList;
     });
 
+    // Also remove this product from any bundles that contain it
+    setBundles((prevBundles) =>
+      prevBundles.map((b) => ({
+        ...b,
+        productIds: (b.productIds || []).filter((pId) => pId !== id)
+      }))
+    );
+
     try {
       await fetch(`/api/products/${id}`, { method: 'DELETE' });
     } catch {}
@@ -753,9 +923,14 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const resetToDefaults = async (): Promise<void> => {
     setDeletedProductIds(new Set());
+    setDeletedBundleIds(new Set());
     try {
       localStorage.removeItem(DELETED_IDS_STORAGE_KEY);
+      localStorage.removeItem(DELETED_BUNDLE_IDS_STORAGE_KEY);
+      localStorage.removeItem(PRODUCTS_INITIALIZED_KEY);
+      localStorage.removeItem(BUNDLES_INITIALIZED_KEY);
       await fetch('/api/products/reset', { method: 'POST' });
+      await fetch('/api/bundles/reset', { method: 'POST' });
     } catch {}
     setProducts(INITIAL_PRODUCTS);
     setBundles(INITIAL_BUNDLES);
@@ -763,20 +938,129 @@ export const ProductProvider: React.FC<{ children: React.ReactNode }> = ({ child
     localStorage.setItem(BUNDLES_STORAGE_KEY, JSON.stringify(INITIAL_BUNDLES));
   };
 
-  // Bundle operations
+  // Bundle operations with Server & Firestore Persistence
   const addBundle = async (bundleData: Omit<Bundle, 'id'>): Promise<string> => {
     const newId = `bundle-${Date.now()}`;
     const newBundle: Bundle = { ...bundleData, id: newId };
-    setBundles((prev) => [newBundle, ...prev]);
+
+    // 1. Immediately update UI state & local cache
+    setBundles((prev) => {
+      const next = [newBundle, ...prev.filter((b) => b.id !== newId)];
+      try {
+        localStorage.setItem(BUNDLES_STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem(BUNDLES_INITIALIZED_KEY, 'true');
+      } catch {}
+      return next;
+    });
+
+    // 2. High-priority persistent save to server database
+    try {
+      await fetch('/api/bundles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newBundle)
+      });
+      console.log('✓ Bundle saved to server DB:', newId);
+    } catch (e) {
+      console.warn('Server bundle save notice:', e);
+    }
+
+    // 3. Sync to Firestore cloud database
+    try {
+      const sanitized = sanitizeForFirestore(newBundle);
+      await setDoc(doc(db, 'bundles', newId), sanitized);
+      console.log('✓ Bundle published to Firestore:', newId);
+    } catch (e) {
+      console.warn('Firestore bundle write notice:', e);
+    }
+
     return newId;
   };
 
   const updateBundle = async (id: string, updated: Partial<Bundle>): Promise<void> => {
-    setBundles((prev) => prev.map((b) => (b.id === id ? { ...b, ...updated } : b)));
+    let fullUpdatedBundle: Bundle | undefined;
+
+    setBundles((prev) => {
+      const next = prev.map((b) => {
+        if (b.id === id) {
+          fullUpdatedBundle = { ...b, ...updated, id };
+          return fullUpdatedBundle;
+        }
+        return b;
+      });
+
+      if (!fullUpdatedBundle) {
+        const match = INITIAL_BUNDLES.find((ib) => ib.id === id);
+        if (match) {
+          fullUpdatedBundle = { ...match, ...updated, id };
+          next.unshift(fullUpdatedBundle);
+        }
+      }
+
+      try {
+        localStorage.setItem(BUNDLES_STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem(BUNDLES_INITIALIZED_KEY, 'true');
+      } catch {}
+      return next;
+    });
+
+    if (fullUpdatedBundle) {
+      try {
+        await fetch('/api/bundles', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(fullUpdatedBundle)
+        });
+      } catch {}
+
+      try {
+        const sanitized = sanitizeForFirestore(fullUpdatedBundle);
+        await setDoc(doc(db, 'bundles', id), sanitized, { merge: true });
+        console.log('✓ Bundle updated in Firestore:', id);
+      } catch (e) {
+        console.warn('Firestore bundle update notice:', e);
+      }
+    }
   };
 
   const deleteBundle = async (id: string): Promise<void> => {
-    setBundles((prev) => prev.filter((b) => b.id !== id));
+    // 1. Mark ID as permanently deleted in state & localStorage
+    setDeletedBundleIds((prev) => {
+      const next = new Set(prev);
+      next.add(id);
+      deletedBundleIdsRef.current = next;
+      try {
+        localStorage.setItem(DELETED_BUNDLE_IDS_STORAGE_KEY, JSON.stringify(Array.from(next)));
+        localStorage.setItem(BUNDLES_INITIALIZED_KEY, 'true');
+      } catch {}
+      return next;
+    });
+
+    // 2. Remove from active state & local cache
+    setBundles((prev) => {
+      const next = prev.filter((b) => b.id !== id);
+      try {
+        localStorage.setItem(BUNDLES_STORAGE_KEY, JSON.stringify(next));
+        localStorage.setItem(BUNDLES_INITIALIZED_KEY, 'true');
+      } catch {}
+      return next;
+    });
+
+    // 3. Remove permanently from server database
+    try {
+      await fetch(`/api/bundles/${id}`, { method: 'DELETE' });
+      console.log('✓ Bundle deleted from server DB:', id);
+    } catch (e) {
+      console.warn('Server bundle delete notice:', e);
+    }
+
+    // 4. Remove from Firestore
+    try {
+      await deleteDoc(doc(db, 'bundles', id));
+      console.log('✓ Bundle deleted from Firestore:', id);
+    } catch (e) {
+      console.warn('Firestore bundle delete notice:', e);
+    }
   };
 
   // Coupon operations

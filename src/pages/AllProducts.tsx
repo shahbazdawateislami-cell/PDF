@@ -82,7 +82,7 @@ export default function AllProducts() {
               <Search size={14} className="absolute left-3 top-2.5 text-gray-400" />
               <input
                 type="text"
-                value={searchQuery}
+                value={searchQuery ?? ""}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Filter by keyword..."
                 className="w-full pl-8 pr-3 py-1.5 text-xs bg-gray-50 border border-gray-200 rounded-xl outline-none"
@@ -90,7 +90,7 @@ export default function AllProducts() {
             </div>
 
             <select
-              value={sortBy}
+              value={sortBy ?? "featured"}
               onChange={(e) => setSortBy(e.target.value as any)}
               className="text-xs bg-gray-50 border border-gray-200 rounded-xl px-3 py-1.5 outline-none font-medium text-gray-700"
             >

@@ -641,7 +641,7 @@ export default function Home() {
               <form onSubmit={handleNewsletterSubmit} className="flex gap-2">
                 <input
                   type="email"
-                  value={newsletterEmail}
+                  value={newsletterEmail ?? ""}
                   onChange={(e) => setNewsletterEmail(e.target.value)}
                   placeholder="Enter your email"
                   required

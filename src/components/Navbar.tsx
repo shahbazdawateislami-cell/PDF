@@ -86,7 +86,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearch }) => {
           >
             <input
               type="text"
-              value={searchQuery}
+              value={searchQuery ?? ""}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search PDFs, books, courses..."
               className="w-full pl-4 pr-12 py-2 text-sm bg-gray-50 hover:bg-white focus:bg-white border border-gray-300 focus:border-blue-500 rounded-full outline-none transition-all"
@@ -202,7 +202,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearch }) => {
           <form onSubmit={handleSearchSubmit} className="flex items-center relative">
             <input
               type="text"
-              value={searchQuery}
+              value={searchQuery ?? ""}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search PDFs, books, courses..."
               className="w-full pl-3 pr-10 py-2 text-xs bg-gray-50 border border-gray-300 rounded-full outline-none"
@@ -327,7 +327,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearch }) => {
                 <div className="relative">
                   <input
                     type="text"
-                    value={adminIdInput}
+                    value={adminIdInput ?? ""}
                     onChange={(e) => {
                       setAdminIdInput(e.target.value);
                       setLoginError('');
@@ -347,7 +347,7 @@ export const Navbar: React.FC<NavbarProps> = ({ onSearch }) => {
                 <div className="relative">
                   <input
                     type={showPassword ? 'text' : 'password'}
-                    value={adminPasswordInput}
+                    value={adminPasswordInput ?? ""}
                     onChange={(e) => {
                       setAdminPasswordInput(e.target.value);
                       setLoginError('');

@@ -662,7 +662,7 @@ export default function Checkout() {
                 <form onSubmit={(e) => handleApplyCoupon(e)} className="flex gap-2">
                   <input
                     type="text"
-                    value={couponCode}
+                    value={couponCode ?? ""}
                     onChange={(e) => setCouponCode(e.target.value)}
                     placeholder="Enter coupon code (e.g. MASTER10, FLAT50)"
                     className="flex-1 px-3 py-2 text-xs uppercase border border-gray-300 rounded-xl outline-none font-mono focus:border-red-600 focus:ring-1 focus:ring-red-200 bg-white"

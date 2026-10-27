@@ -137,7 +137,7 @@ export const Footer: React.FC = () => {
           <form onSubmit={handleSubscribe} className="space-y-2">
             <input
               type="email"
-              value={newsletterEmail}
+              value={newsletterEmail ?? ""}
               onChange={(e) => setNewsletterEmail(e.target.value)}
               placeholder="Enter your email address"
               required
